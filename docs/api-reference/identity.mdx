@@ -1,0 +1,411 @@
+---
+title: Identity API
+description: 'API reference for identity management'
+---
+
+## Overview
+
+The Identity layer provides decentralized identity management for AI agents.
+
+```python
+from arbiter import Identity
+```
+
+---
+
+## High-Level API
+
+### Identity Class
+
+Convenience class for accessing identity components.
+
+<ResponseField name="create_key_manager" type="method">
+  Create a new key manager for generating and storing keys.
+  
+  ```python
+  key_manager = Identity.create_key_manager()
+  ```
+</ResponseField>
+
+<ResponseField name="create_issuer" type="method">
+  Create a credential issuer.
+  
+  **Parameters:**
+  - `issuer_did` (str): DID of the issuer
+  
+  ```python
+  issuer = Identity.create_issuer("did:arbiter:issuer")
+  ```
+</ResponseField>
+
+<ResponseField name="create_verification_hub" type="method">
+  Create a verification hub for validating presentations.
+  
+  ```python
+  hub = Identity.create_verification_hub()
+  ```
+</ResponseField>
+
+<ResponseField name="create_revocation_manager" type="method">
+  Create a revocation manager.
+  
+  ```python
+  revocation = Identity.create_revocation_manager()
+  ```
+</ResponseField>
+
+---
+
+## DID Module
+
+### DID
+
+```python
+from arbiter import DID
+```
+
+<ResponseField name="from_public_key" type="classmethod">
+  Create DID from public key bytes.
+  
+  **Parameters:**
+  - `public_key_bytes` (bytes): Raw public key
+  
+  **Returns:** `DID`
+  
+  ```python
+  did = DID.from_public_key(auth_key.public_key.public_key_bytes)
+  print(did.did_string)  # did:arbiter:2N4Q...
+  ```
+</ResponseField>
+
+<ResponseField name="did_string" type="property">
+  The full DID string.
+  
+  **Returns:** `str`
+</ResponseField>
+
+<ResponseField name="method" type="property">
+  The DID method (always "arbiter").
+  
+  **Returns:** `str`
+</ResponseField>
+
+### DIDDocumentBuilder
+
+```python
+from arbiter.identity import DIDDocumentBuilder
+```
+
+<ResponseField name="__init__" type="constructor">
+  Create a builder for a DID document.
+  
+  **Parameters:**
+  - `did` (DID): The DID to build a document for
+</ResponseField>
+
+<ResponseField name="add_authentication_key" type="method">
+  Add an authentication verification method.
+  
+  **Parameters:**
+  - `key_bytes` (bytes): Public key bytes
+  - `key_id` (str, optional): Key identifier
+</ResponseField>
+
+<ResponseField name="add_key_agreement_key" type="method">
+  Add a key agreement verification method for encryption.
+</ResponseField>
+
+<ResponseField name="add_assertion_key" type="method">
+  Add an assertion verification method for signing claims.
+</ResponseField>
+
+<ResponseField name="build" type="method">
+  Build the DID document.
+  
+  **Returns:** `DIDDocument`
+</ResponseField>
+
+---
+
+## Key Management
+
+### KeyManager
+
+```python
+from arbiter.identity import KeyManager
+```
+
+<ResponseField name="generate_authentication_key" type="method">
+  Generate a Dilithium key for authentication.
+  
+  **Returns:** `ManagedKeyPair`
+  
+  ```python
+  auth_key = key_manager.generate_authentication_key()
+  ```
+</ResponseField>
+
+<ResponseField name="generate_encryption_key" type="method">
+  Generate a Kyber key for encryption.
+  
+  **Returns:** `ManagedKeyPair`
+</ResponseField>
+
+<ResponseField name="generate_assertion_key" type="method">
+  Generate a key for signing assertions.
+  
+  **Returns:** `ManagedKeyPair`
+</ResponseField>
+
+<ResponseField name="sign" type="method">
+  Sign data with a managed key.
+  
+  **Parameters:**
+  - `key_id` (str): ID of the key to use
+  - `data` (bytes): Data to sign
+  
+  **Returns:** `bytes`
+</ResponseField>
+
+---
+
+## Credential Issuance
+
+### VCIssuer
+
+```python
+from arbiter.identity import VCIssuer
+```
+
+<ResponseField name="create" type="classmethod">
+  Create an issuer with the given DID.
+  
+  **Parameters:**
+  - `issuer_did` (str): DID of the issuer
+  
+  **Returns:** `VCIssuer`
+</ResponseField>
+
+<ResponseField name="issue_agent_identity_credential" type="method">
+  Issue an agent identity credential.
+  
+  **Parameters:**
+  - `subject_did` (str): DID of the subject
+  - `agent_name` (str): Name of the agent
+  - `agent_type` (str): Type of agent
+  - `capabilities` (list[str]): Agent capabilities
+  - `expiration` (datetime, optional): Expiration time
+  
+  **Returns:** `IssuedCredentialBundle`
+  
+  ```python
+  bundle = issuer.issue_agent_identity_credential(
+      subject_did="did:arbiter:agent",
+      agent_name="ResearchBot",
+      agent_type="researcher",
+      capabilities=["search", "analyze"],
+  )
+  ```
+</ResponseField>
+
+<ResponseField name="issue_credential" type="method">
+  Issue a custom credential.
+  
+  **Parameters:**
+  - `request` (CredentialRequest): The credential request
+  
+  **Returns:** `IssuedCredentialBundle`
+</ResponseField>
+
+### IssuedCredentialBundle
+
+<ResponseField name="credential" type="property">
+  The issued `VerifiableCredential`.
+</ResponseField>
+
+<ResponseField name="witness" type="property">
+  Witness for non-revocation proofs.
+</ResponseField>
+
+<ResponseField name="handler_element" type="property">
+  Accumulator element for revocation.
+</ResponseField>
+
+<ResponseField name="raw_signature" type="property">
+  BBS+ signature for selective disclosure.
+</ResponseField>
+
+---
+
+## Proof Generation
+
+### ProofGenerator
+
+```python
+from arbiter.identity import ProofGenerator
+```
+
+<ResponseField name="__init__" type="constructor">
+  Create a proof generator.
+  
+  **Parameters:**
+  - `credential` (VerifiableCredential): The credential
+  - `bbs_signature` (BBSSignature): Raw BBS+ signature
+  - `witness` (Witness): Revocation witness
+</ResponseField>
+
+<ResponseField name="generate_presentation" type="method">
+  Generate a verifiable presentation.
+  
+  **Parameters:**
+  - `request` (ProofRequest): What to prove
+  - `issuer_public_key` (BBSPublicKey): Issuer's BBS+ key
+  - `accumulator_value` (int): Current accumulator
+  
+  **Returns:** `VerifiablePresentation`
+</ResponseField>
+
+### create_proof_request
+
+```python
+from arbiter.identity import create_proof_request
+```
+
+<ResponseField name="create_proof_request" type="function">
+  Create a proof request.
+  
+  **Parameters:**
+  - `challenge` (str): Verifier's challenge
+  - `domain` (str, optional): Verifier's domain
+  - `required_proofs` (list[ProofType], optional): Required proof types
+  - `required_attributes` (list[str], optional): Attributes to disclose
+  - `predicate_requirements` (dict, optional): Predicates to prove
+  
+  **Returns:** `ProofRequest`
+</ResponseField>
+
+---
+
+## Verification
+
+### VerificationHub
+
+```python
+from arbiter.identity import VerificationHub
+```
+
+<ResponseField name="verify_presentation" type="method">
+  Verify a presentation.
+  
+  **Parameters:**
+  - `presentation` (VerifiablePresentation): The presentation
+  - `expected_challenge` (str): Expected challenge
+  - `expected_domain` (str, optional): Expected domain
+  - `issuer_public_key` (BBSPublicKey): Issuer's key
+  - `accumulator_value` (int): Current accumulator
+  
+  **Returns:** `VerificationResult`
+  
+  ```python
+  result = hub.verify_presentation(
+      presentation=presentation,
+      expected_challenge=challenge,
+      expected_domain="service.example.com",
+      issuer_public_key=issuer_pk,
+      accumulator_value=acc_value,
+  )
+  
+  if result.is_trusted:
+      print("Trusted!")
+  ```
+</ResponseField>
+
+### VerificationResult
+
+<ResponseField name="is_trusted" type="property">
+  Whether the presentation is trusted.
+  
+  **Returns:** `bool`
+</ResponseField>
+
+<ResponseField name="decision" type="property">
+  The trust decision.
+  
+  **Returns:** `TrustDecision`
+</ResponseField>
+
+<ResponseField name="disclosed_attributes" type="property">
+  Attributes that were disclosed.
+  
+  **Returns:** `dict`
+</ResponseField>
+
+<ResponseField name="failure_reason" type="property">
+  Reason for failure (if any).
+  
+  **Returns:** `str | None`
+</ResponseField>
+
+---
+
+## Revocation
+
+### RevocationManager
+
+```python
+from arbiter.identity import RevocationManager
+```
+
+<ResponseField name="initialize_system" type="classmethod">
+  Initialize a new revocation system.
+  
+  **Returns:** `RevocationManager`
+</ResponseField>
+
+<ResponseField name="revoke_credential" type="method">
+  Revoke a credential.
+  
+  **Parameters:**
+  - `handler_id` (str): Handler ID from credential bundle
+  
+  **Returns:** `RevocationRegistryState`
+</ResponseField>
+
+<ResponseField name="get_current_accumulator" type="method">
+  Get the current accumulator value.
+  
+  **Returns:** `int`
+</ResponseField>
+
+<ResponseField name="is_revoked" type="method">
+  Check if a credential is revoked.
+  
+  **Parameters:**
+  - `handler_id` (str): Handler ID
+  
+  **Returns:** `bool`
+</ResponseField>
+
+---
+
+## Types
+
+### TrustDecision
+
+```python
+class TrustDecision(Enum):
+    TRUSTED = "TRUSTED"
+    UNTRUSTED = "UNTRUSTED"
+    REVOKED = "REVOKED"
+    EXPIRED = "EXPIRED"
+    UNKNOWN = "UNKNOWN"
+```
+
+### ProofType
+
+```python
+class ProofType(Enum):
+    CREDENTIAL_VALIDITY = "credential_validity"
+    NON_REVOCATION = "non_revocation"
+    CAPABILITY = "capability"
+```

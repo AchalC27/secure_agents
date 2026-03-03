@@ -1,0 +1,353 @@
+---
+title: Commitment Schemes
+description: 'Hash, Pedersen, and vector commitments'
+---
+
+Commitment schemes allow binding to a value without revealing it, then opening the commitment later to prove the value.
+
+## Overview
+
+<Info>
+Commitments have two phases: **commit** (hide value) and **open** (reveal value).
+</Info>
+
+### Properties
+
+| Property | Description |
+|----------|-------------|
+| **Hiding** | Commitment reveals nothing about the value |
+| **Binding** | Cannot open to a different value |
+
+---
+
+## Hash Commitment
+
+The simplest commitment scheme using cryptographic hash functions.
+
+### Properties
+
+- **Computationally hiding** and **computationally binding**
+- Fast and simple
+- Use case: Simple value hiding
+
+### Operations
+
+```python
+from arbiter.crypto import hash_commit, hash_open
+
+# Commit to a value
+value = b"secret message"
+commitment = hash_commit(value)
+# commitment.c = SHA-256(r || value)
+# commitment.r = random nonce
+
+# Later, open the commitment
+is_valid = hash_open(commitment.c, commitment.r, value)
+print(f"Valid opening: {is_valid}")  # True
+```
+
+### Algorithm
+
+```
+Commit(value):
+    r ← random(32 bytes)
+    C = SHA-256(r || value)
+    return (C, r)
+
+Open(C, r, value):
+    return C == SHA-256(r || value)
+```
+
+---
+
+## Pedersen Commitment
+
+Information-theoretically hiding commitment with homomorphic properties.
+
+### Properties
+
+- **Information-theoretically hiding**: Even unlimited computation can't reveal value
+- **Computationally binding**: Based on discrete log assumption
+- **Additively homomorphic**: Can add commitments
+
+### Setup
+
+```python
+from arbiter.crypto import generate_pedersen_params
+
+# Generate parameters (g, h where log_g(h) is unknown)
+params = generate_pedersen_params(bit_length=256)
+```
+
+### Operations
+
+```python
+from arbiter.crypto import pedersen_commit, pedersen_open
+
+# Commit to a value (integer)
+value = 42
+commitment = pedersen_commit(params, value)
+# commitment.c = g^value · h^r mod p
+# commitment.r = random blinding factor
+
+# Open the commitment
+is_valid = pedersen_open(params, commitment.c, commitment.r, value)
+print(f"Valid opening: {is_valid}")  # True
+```
+
+### Homomorphic Addition
+
+```python
+from arbiter.crypto import pedersen_add
+
+# Commit to two values
+c1 = pedersen_commit(params, 10)  # r1
+c2 = pedersen_commit(params, 32)  # r2
+
+# Add commitments
+c_sum = pedersen_add(params, c1, c2)
+# c_sum = C(10 + 32, r1 + r2)
+
+# Open the sum
+is_valid = pedersen_open(params, c_sum.c, c1.r + c2.r, 42)
+print(f"Sum valid: {is_valid}")  # True
+```
+
+### Scalar Multiplication
+
+```python
+from arbiter.crypto import pedersen_scalar_multiply
+
+# Commit to value
+c = pedersen_commit(params, 10)
+
+# Multiply by scalar
+c_scaled = pedersen_scalar_multiply(params, c, 5)
+# c_scaled = C(10 * 5, r * 5)
+
+is_valid = pedersen_open(params, c_scaled.c, c.r * 5, 50)
+print(f"Scaled valid: {is_valid}")  # True
+```
+
+### Algorithm
+
+```
+Setup:
+    p = large prime
+    g, h = generators where log_g(h) is unknown
+
+Commit(value, r):
+    C = g^value · h^r mod p
+    return (C, r)
+
+Open(C, r, value):
+    return C == g^value · h^r mod p
+
+Add(C_1, C_2):
+    return C_1 · C_2 mod p
+    # = g^(v1+v2) · h^(r1+r2)
+```
+
+---
+
+## Vector Commitment (Merkle Tree)
+
+Commit to multiple values with position-specific openings.
+
+### Properties
+
+- Commit to **vector of values**
+- Open **individual positions** without revealing others
+- Based on Merkle tree structure
+
+### Operations
+
+```python
+from arbiter.crypto import VectorCommitter
+
+# Create committer
+committer = VectorCommitter()
+
+# Commit to vector of values
+values = [b"value0", b"value1", b"value2", b"value3"]
+commitment = committer.commit(values)
+# commitment.root = Merkle root
+
+# Open specific position
+opening = committer.open(1)  # Open position 1
+# opening.value = "value1"
+# opening.path = Merkle proof path
+
+# Verify opening
+is_valid = committer.verify(commitment.root, 1, opening.value, opening.path)
+print(f"Position 1 valid: {is_valid}")  # True
+```
+
+### Merkle Tree Structure
+
+```mermaid
+graph TB
+    ROOT[Root = H(H01 || H23)]
+    H01[H01 = H(H0 || H1)]
+    H23[H23 = H(H2 || H3)]
+    H0[H0 = H(value0)]
+    H1[H1 = H(value1)]
+    H2[H2 = H(value2)]
+    H3[H3 = H(value3)]
+    
+    ROOT --> H01
+    ROOT --> H23
+    H01 --> H0
+    H01 --> H1
+    H23 --> H2
+    H23 --> H3
+```
+
+### Verification
+
+```python
+# To verify position 1 is "value1":
+# Path: [H0, H23]
+
+computed = H(0 || "value1")      # H1
+computed = H(1 || H0 || computed)  # H01
+computed = H(1 || computed || H23) # ROOT
+
+assert computed == commitment.root
+```
+
+### Algorithm
+
+```
+Commit(values):
+    leaves = [H(0 || v) for v in values]
+    root = build_merkle_tree(leaves)
+    return root
+
+Open(index):
+    path = get_merkle_path(index)
+    return (values[index], path)
+
+Verify(root, index, value, path):
+    computed = H(0 || value)
+    for sibling in path:
+        if index % 2 == 0:
+            computed = H(1 || computed || sibling)
+        else:
+            computed = H(1 || sibling || computed)
+        index //= 2
+    return computed == root
+```
+
+---
+
+## Use Cases in Arbiter
+
+### Hash Commitments
+
+```python
+# Simple binding to challenge response
+challenge = os.urandom(32)
+commitment = hash_commit(challenge)
+# Send commitment first, reveal later
+```
+
+### Pedersen Commitments
+
+```python
+# Zero-knowledge proofs of value relationships
+# "I know values x, y such that x + y = z"
+c_x = pedersen_commit(params, x)
+c_y = pedersen_commit(params, y)
+c_z = pedersen_add(params, c_x, c_y)
+# Prove c_z opens to claimed sum
+```
+
+### Vector Commitments
+
+```python
+# Commit to credential attributes
+attributes = [b"role:researcher", b"level:3", b"cap:search"]
+commitment = committer.commit(attributes)
+
+# Later, open just the role
+opening = committer.open(0)
+# Verifier sees "role:researcher" and proof
+```
+
+---
+
+## Comparison
+
+| Scheme | Hiding | Binding | Homomorphic | Use Case |
+|--------|--------|---------|-------------|----------|
+| Hash | Computational | Computational | No | Simple commitments |
+| Pedersen | Information-theoretic | Computational | Yes | ZK proofs |
+| Vector | Computational | Computational | No | Multiple values |
+
+---
+
+## API Reference
+
+### Hash Commitment
+
+```python
+@dataclass
+class HashCommitment:
+    c: bytes  # Commitment value
+    r: bytes  # Random nonce
+
+def hash_commit(value: bytes) -> HashCommitment: ...
+def hash_open(c: bytes, r: bytes, value: bytes) -> bool: ...
+```
+
+### Pedersen Commitment
+
+```python
+@dataclass
+class PedersenParams:
+    p: int  # Prime modulus
+    g: int  # Generator
+    h: int  # Second generator
+
+@dataclass
+class PedersenCommitment:
+    c: int  # Commitment value
+    r: int  # Blinding factor
+
+def generate_pedersen_params(bit_length: int) -> PedersenParams: ...
+def pedersen_commit(params: PedersenParams, value: int) -> PedersenCommitment: ...
+def pedersen_open(params: PedersenParams, c: int, r: int, value: int) -> bool: ...
+def pedersen_add(params: PedersenParams, c1: PedersenCommitment, c2: PedersenCommitment) -> PedersenCommitment: ...
+```
+
+### Vector Commitment
+
+```python
+@dataclass
+class VectorCommitment:
+    root: bytes
+
+@dataclass
+class VectorOpening:
+    value: bytes
+    path: list[bytes]
+
+class VectorCommitter:
+    def commit(self, values: list[bytes]) -> VectorCommitment: ...
+    def open(self, index: int) -> VectorOpening: ...
+    def verify(self, root: bytes, index: int, value: bytes, path: list[bytes]) -> bool: ...
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Paillier Encryption" icon="shield-halved" href="/cryptography/paillier">
+    Homomorphic encryption for computation
+  </Card>
+  <Card title="BBS+ Signatures" icon="signature" href="/cryptography/bbs-plus">
+    Multi-message signatures
+  </Card>
+</CardGroup>

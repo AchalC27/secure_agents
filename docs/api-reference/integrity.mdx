@@ -1,0 +1,412 @@
+---
+title: Integrity API
+description: 'API reference for access control and homomorphic encryption'
+---
+
+## Overview
+
+The Integrity layer provides ABAC and privacy-preserving computation.
+
+```python
+from arbiter import Integrity
+```
+
+---
+
+## High-Level API
+
+### Integrity Class
+
+<ResponseField name="create_enforcement_point" type="method">
+  Create a policy enforcement point.
+  
+  ```python
+  pep = Integrity.create_enforcement_point()
+  ```
+</ResponseField>
+
+<ResponseField name="create_policy_admin" type="method">
+  Create a policy administration point.
+  
+  ```python
+  pap = Integrity.create_policy_admin()
+  ```
+</ResponseField>
+
+---
+
+## ABAC Components
+
+### PolicyEnforcementPoint
+
+```python
+from arbiter.integrity import PolicyEnforcementPoint
+```
+
+<ResponseField name="enforce" type="method">
+  Enforce access control.
+  
+  **Parameters:**
+  - `subject_did` (str): Agent's DID
+  - `resource_id` (str): Resource identifier
+  - `action` (str): Requested action
+  - `presentation` (VerifiablePresentation): Agent's presentation
+  - `resource_attributes` (dict, optional): Resource metadata
+  
+  **Returns:** `EnforcementResult`
+  
+  ```python
+  result = pep.enforce(
+      subject_did="did:arbiter:agent",
+      resource_id="data/papers",
+      action="read",
+      presentation=presentation,
+  )
+  
+  if result.permitted:
+      print("Access granted!")
+  ```
+</ResponseField>
+
+### EnforcementResult
+
+<ResponseField name="permitted" type="property">
+  Whether access is permitted.
+  
+  **Returns:** `bool`
+</ResponseField>
+
+<ResponseField name="effect" type="property">
+  The decision effect (PERMIT/DENY).
+  
+  **Returns:** `Effect`
+</ResponseField>
+
+<ResponseField name="applied_rule" type="property">
+  ID of the rule that was applied.
+  
+  **Returns:** `str | None`
+</ResponseField>
+
+<ResponseField name="reason" type="property">
+  Reason for the decision.
+  
+  **Returns:** `str`
+</ResponseField>
+
+---
+
+### PolicyAdministrationPoint
+
+```python
+from arbiter.integrity import PolicyAdministrationPoint
+```
+
+<ResponseField name="add_policy" type="method">
+  Add a new policy.
+  
+  **Parameters:**
+  - `policy` (Policy): The policy to add
+  
+  ```python
+  pap.add_policy(policy)
+  ```
+</ResponseField>
+
+<ResponseField name="update_policy" type="method">
+  Update an existing policy.
+  
+  **Parameters:**
+  - `policy` (Policy): Updated policy (same ID)
+</ResponseField>
+
+<ResponseField name="remove_policy" type="method">
+  Remove a policy.
+  
+  **Parameters:**
+  - `policy_id` (str): Policy identifier
+</ResponseField>
+
+<ResponseField name="get_policy" type="method">
+  Get a policy by ID.
+  
+  **Parameters:**
+  - `policy_id` (str): Policy identifier
+  
+  **Returns:** `Policy | None`
+</ResponseField>
+
+<ResponseField name="list_policies" type="method">
+  List all policies.
+  
+  **Returns:** `list[Policy]`
+</ResponseField>
+
+---
+
+### PolicyDecisionPoint
+
+```python
+from arbiter.integrity import PolicyDecisionPoint
+```
+
+<ResponseField name="evaluate" type="method">
+  Evaluate policies against context.
+  
+  **Parameters:**
+  - `policies` (list[Policy]): Policies to evaluate
+  - `context` (EvaluationContext): Attribute context
+  
+  **Returns:** `AccessDecision`
+</ResponseField>
+
+---
+
+### PolicyInformationPoint
+
+```python
+from arbiter.integrity import PolicyInformationPoint
+```
+
+<ResponseField name="get_attributes" type="method">
+  Get attributes for evaluation.
+  
+  **Parameters:**
+  - `subject_did` (str): Subject's DID
+  - `resource_id` (str): Resource ID
+  - `action` (str): Action
+  - `presentation` (VerifiablePresentation): Presentation
+  
+  **Returns:** `AttributeContext`
+</ResponseField>
+
+---
+
+## Policy Models
+
+### Policy
+
+```python
+from arbiter.common import Policy
+```
+
+<ResponseField name="__init__" type="constructor">
+  Create a policy.
+  
+  **Parameters:**
+  - `policy_id` (str): Unique identifier
+  - `version` (str, optional): Version string
+  - `target` (dict): When policy applies
+  - `combining_algorithm` (str, optional): How to combine rules
+  - `rules` (list[PolicyRule]): The rules
+  
+  ```python
+  policy = Policy(
+      policy_id="research-access",
+      version="1.0",
+      target={"resource.type": "research"},
+      combining_algorithm="FIRST_APPLICABLE",
+      rules=[...],
+  )
+  ```
+</ResponseField>
+
+### PolicyRule
+
+```python
+from arbiter.common import PolicyRule
+```
+
+<ResponseField name="__init__" type="constructor">
+  Create a policy rule.
+  
+  **Parameters:**
+  - `rule_id` (str): Unique identifier
+  - `effect` (Effect): PERMIT or DENY
+  - `conditions` (list[Condition]): Rule conditions
+  
+  ```python
+  rule = PolicyRule(
+      rule_id="researcher-read",
+      effect=Effect.PERMIT,
+      conditions=[...],
+  )
+  ```
+</ResponseField>
+
+### Condition
+
+```python
+from arbiter.common import Condition, ConditionOperator
+```
+
+<ResponseField name="__init__" type="constructor">
+  Create a condition.
+  
+  **Parameters:**
+  - `attribute_category` (str): subject/resource/action/environment
+  - `attribute_id` (str): Attribute name
+  - `operator` (ConditionOperator): Comparison operator
+  - `value` (Any): Value to compare
+  
+  ```python
+  condition = Condition(
+      attribute_category="subject",
+      attribute_id="role",
+      operator=ConditionOperator.EQUALS,
+      value="researcher",
+  )
+  ```
+</ResponseField>
+
+### Effect
+
+```python
+class Effect(Enum):
+    PERMIT = "PERMIT"
+    DENY = "DENY"
+```
+
+### ConditionOperator
+
+```python
+class ConditionOperator(Enum):
+    EQUALS = "EQUALS"
+    NOT_EQUALS = "NOT_EQUALS"
+    CONTAINS = "CONTAINS"
+    IN = "IN"
+    GREATER_THAN = "GREATER_THAN"
+    GREATER_EQUAL = "GREATER_EQUAL"
+    LESS_THAN = "LESS_THAN"
+    LESS_EQUAL = "LESS_EQUAL"
+    REGEX_MATCH = "REGEX_MATCH"
+    EXISTS = "EXISTS"
+```
+
+---
+
+## Homomorphic Encryption
+
+### Key Generation
+
+```python
+from arbiter.integrity.homomorphic import generate_keypair
+```
+
+<ResponseField name="generate_keypair" type="function">
+  Generate Paillier keypair.
+  
+  **Parameters:**
+  - `key_size` (int, optional): Key size in bits (default: 2048)
+  
+  **Returns:** `PaillierKeyPair`
+  
+  ```python
+  keypair = generate_keypair(key_size=2048)
+  ```
+</ResponseField>
+
+### Encryption
+
+```python
+from arbiter.integrity.homomorphic import encrypt, decrypt
+```
+
+<ResponseField name="encrypt" type="function">
+  Encrypt an integer.
+  
+  **Parameters:**
+  - `public_key` (PaillierPublicKey): Public key
+  - `message` (int): Integer to encrypt
+  
+  **Returns:** `EncryptedNumber`
+  
+  ```python
+  encrypted = encrypt(keypair.public_key, 42)
+  ```
+</ResponseField>
+
+<ResponseField name="decrypt" type="function">
+  Decrypt to integer.
+  
+  **Parameters:**
+  - `private_key` (PaillierPrivateKey): Private key
+  - `encrypted` (EncryptedNumber): Encrypted value
+  
+  **Returns:** `int`
+  
+  ```python
+  decrypted = decrypt(keypair.private_key, encrypted)
+  ```
+</ResponseField>
+
+### Homomorphic Operations
+
+```python
+from arbiter.integrity.homomorphic import encrypted_sum
+```
+
+<ResponseField name="encrypted_sum" type="function">
+  Sum multiple encrypted values.
+  
+  **Parameters:**
+  - `encrypted_values` (list[EncryptedNumber]): Values to sum
+  
+  **Returns:** `EncryptedNumber`
+  
+  ```python
+  enc_total = encrypted_sum([enc_a, enc_b, enc_c])
+  total = decrypt(sk, enc_total)  # a + b + c
+  ```
+</ResponseField>
+
+### EncryptedNumber
+
+<ResponseField name="__add__" type="method">
+  Add two encrypted numbers.
+  
+  ```python
+  enc_sum = enc_a + enc_b  # E(a + b)
+  ```
+</ResponseField>
+
+<ResponseField name="__mul__" type="method">
+  Multiply by scalar.
+  
+  ```python
+  enc_scaled = enc_a * 5  # E(5 * a)
+  ```
+</ResponseField>
+
+---
+
+## Types
+
+### PaillierPublicKey
+
+```python
+@dataclass
+class PaillierPublicKey:
+    n: int          # Modulus
+    g: int          # Generator
+    n_squared: int  # n²
+```
+
+### PaillierPrivateKey
+
+```python
+@dataclass
+class PaillierPrivateKey:
+    lambda_: int
+    mu: int
+    public_key: PaillierPublicKey
+```
+
+### PaillierKeyPair
+
+```python
+@dataclass
+class PaillierKeyPair:
+    public_key: PaillierPublicKey
+    private_key: PaillierPrivateKey
+```

@@ -1,0 +1,424 @@
+---
+title: Crypto API
+description: 'API reference for cryptographic primitives'
+---
+
+## Overview
+
+The Crypto layer provides cryptographic building blocks.
+
+```python
+from arbiter.crypto import *
+```
+
+---
+
+## Post-Quantum Cryptography
+
+### Dilithium (ML-DSA)
+
+```python
+from arbiter.crypto import (
+    generate_dilithium_keypair,
+    dilithium_sign,
+    dilithium_verify,
+)
+```
+
+<ResponseField name="generate_dilithium_keypair" type="function">
+  Generate Dilithium keypair.
+  
+  **Parameters:**
+  - `security_level` (int, optional): 2, 3, or 5 (default: 3)
+  
+  **Returns:** `DilithiumKeyPair`
+  
+  ```python
+  keypair = generate_dilithium_keypair(security_level=3)
+  ```
+</ResponseField>
+
+<ResponseField name="dilithium_sign" type="function">
+  Sign a message.
+  
+  **Parameters:**
+  - `private_key` (DilithiumPrivateKey): Private key
+  - `message` (bytes): Message to sign
+  
+  **Returns:** `bytes`
+  
+  ```python
+  signature = dilithium_sign(keypair.private_key, b"message")
+  ```
+</ResponseField>
+
+<ResponseField name="dilithium_verify" type="function">
+  Verify a signature.
+  
+  **Parameters:**
+  - `public_key` (DilithiumPublicKey): Public key
+  - `message` (bytes): Original message
+  - `signature` (bytes): Signature
+  
+  **Returns:** `bool`
+  
+  ```python
+  is_valid = dilithium_verify(keypair.public_key, message, signature)
+  ```
+</ResponseField>
+
+### Kyber (ML-KEM)
+
+```python
+from arbiter.crypto import (
+    generate_kyber_keypair,
+    kyber_encapsulate,
+    kyber_decapsulate,
+)
+```
+
+<ResponseField name="generate_kyber_keypair" type="function">
+  Generate Kyber keypair.
+  
+  **Parameters:**
+  - `security_level` (int, optional): 1, 3, or 5 (default: 3)
+  
+  **Returns:** `KyberKeyPair`
+</ResponseField>
+
+<ResponseField name="kyber_encapsulate" type="function">
+  Create shared secret and ciphertext.
+  
+  **Parameters:**
+  - `public_key` (KyberPublicKey): Recipient's public key
+  
+  **Returns:** `EncapsulationResult`
+  
+  ```python
+  result = kyber_encapsulate(keypair.public_key)
+  ciphertext = result.ciphertext
+  shared_secret = result.shared_secret
+  ```
+</ResponseField>
+
+<ResponseField name="kyber_decapsulate" type="function">
+  Recover shared secret from ciphertext.
+  
+  **Parameters:**
+  - `private_key` (KyberPrivateKey): Private key
+  - `ciphertext` (bytes): Ciphertext
+  
+  **Returns:** `bytes`
+  
+  ```python
+  shared_secret = kyber_decapsulate(keypair.private_key, ciphertext)
+  ```
+</ResponseField>
+
+---
+
+## BBS+ Signatures
+
+```python
+from arbiter.crypto import (
+    generate_bbs_keypair,
+    bbs_sign,
+    bbs_verify,
+    bbs_create_proof,
+    bbs_verify_proof,
+)
+```
+
+<ResponseField name="generate_bbs_keypair" type="function">
+  Generate BBS+ keypair.
+  
+  **Parameters:**
+  - `max_messages` (int, optional): Maximum messages to sign (default: 10)
+  
+  **Returns:** `BBSKeyPair`
+</ResponseField>
+
+<ResponseField name="bbs_sign" type="function">
+  Sign multiple messages.
+  
+  **Parameters:**
+  - `private_key` (BBSPrivateKey): Private key
+  - `messages` (list[bytes]): Messages to sign
+  
+  **Returns:** `BBSSignature`
+  
+  ```python
+  signature = bbs_sign(keypair.private_key, [b"msg1", b"msg2"])
+  ```
+</ResponseField>
+
+<ResponseField name="bbs_verify" type="function">
+  Verify a BBS+ signature.
+  
+  **Parameters:**
+  - `public_key` (BBSPublicKey): Public key
+  - `messages` (list[bytes]): Original messages
+  - `signature` (BBSSignature): Signature
+  
+  **Returns:** `bool`
+</ResponseField>
+
+<ResponseField name="bbs_create_proof" type="function">
+  Create selective disclosure proof.
+  
+  **Parameters:**
+  - `public_key` (BBSPublicKey): Public key
+  - `signature` (BBSSignature): Original signature
+  - `messages` (list[bytes]): All messages
+  - `disclosed_indices` (list[int]): Indices to disclose
+  - `nonce` (bytes): Verifier's nonce
+  
+  **Returns:** `BBSProof`
+  
+  ```python
+  proof = bbs_create_proof(
+      keypair.public_key,
+      signature,
+      messages,
+      disclosed_indices=[0, 2],  # Reveal first and third
+      nonce=challenge,
+  )
+  ```
+</ResponseField>
+
+<ResponseField name="bbs_verify_proof" type="function">
+  Verify a selective disclosure proof.
+  
+  **Parameters:**
+  - `public_key` (BBSPublicKey): Public key
+  - `proof` (BBSProof): The proof
+  - `total_message_count` (int): Total messages in original
+  
+  **Returns:** `bool`
+</ResponseField>
+
+---
+
+## Accumulators
+
+```python
+from arbiter.crypto import (
+    AccumulatorManager,
+    update_witness,
+)
+```
+
+<ResponseField name="AccumulatorManager" type="class">
+  Manage cryptographic accumulator.
+  
+  **Constructor Parameters:**
+  - `modulus_bits` (int, optional): RSA modulus size (default: 2048)
+</ResponseField>
+
+<ResponseField name="AccumulatorManager.initialize" type="method">
+  Initialize the accumulator.
+  
+  **Returns:** `AccumulatorState`
+</ResponseField>
+
+<ResponseField name="AccumulatorManager.add" type="method">
+  Add element to accumulator.
+  
+  **Parameters:**
+  - `state` (AccumulatorState): Current state
+  - `element` (int): Element to add
+  
+  **Returns:** `tuple[AccumulatorState, Witness]`
+</ResponseField>
+
+<ResponseField name="AccumulatorManager.remove" type="method">
+  Remove element (requires trapdoor).
+  
+  **Parameters:**
+  - `state` (AccumulatorState): Current state
+  - `element` (int): Element to remove
+  
+  **Returns:** `AccumulatorState`
+</ResponseField>
+
+<ResponseField name="AccumulatorManager.verify_membership" type="method">
+  Verify element membership.
+  
+  **Parameters:**
+  - `state` (AccumulatorState): Current state
+  - `element` (int): Element
+  - `witness` (Witness): Membership witness
+  
+  **Returns:** `bool`
+</ResponseField>
+
+<ResponseField name="update_witness" type="function">
+  Update witness after accumulator changes.
+  
+  **Parameters:**
+  - `witness` (Witness): Current witness
+  - `my_element` (int): Holder's element
+  - `updates` (list): Accumulator updates
+  
+  **Returns:** `Witness`
+</ResponseField>
+
+---
+
+## Commitments
+
+### Hash Commitment
+
+```python
+from arbiter.crypto import hash_commit, hash_open
+```
+
+<ResponseField name="hash_commit" type="function">
+  Create hash commitment.
+  
+  **Parameters:**
+  - `value` (bytes): Value to commit
+  
+  **Returns:** `HashCommitment`
+</ResponseField>
+
+<ResponseField name="hash_open" type="function">
+  Verify hash commitment opening.
+  
+  **Parameters:**
+  - `c` (bytes): Commitment
+  - `r` (bytes): Randomness
+  - `value` (bytes): Claimed value
+  
+  **Returns:** `bool`
+</ResponseField>
+
+### Pedersen Commitment
+
+```python
+from arbiter.crypto import (
+    generate_pedersen_params,
+    pedersen_commit,
+    pedersen_open,
+    pedersen_add,
+)
+```
+
+<ResponseField name="generate_pedersen_params" type="function">
+  Generate Pedersen parameters.
+  
+  **Parameters:**
+  - `bit_length` (int, optional): Security bits (default: 256)
+  
+  **Returns:** `PedersenParams`
+</ResponseField>
+
+<ResponseField name="pedersen_commit" type="function">
+  Create Pedersen commitment.
+  
+  **Parameters:**
+  - `params` (PedersenParams): Parameters
+  - `value` (int): Value to commit
+  
+  **Returns:** `PedersenCommitment`
+</ResponseField>
+
+<ResponseField name="pedersen_add" type="function">
+  Add two commitments (homomorphic).
+  
+  **Parameters:**
+  - `params` (PedersenParams): Parameters
+  - `c1` (PedersenCommitment): First commitment
+  - `c2` (PedersenCommitment): Second commitment
+  
+  **Returns:** `PedersenCommitment`
+</ResponseField>
+
+### Vector Commitment
+
+```python
+from arbiter.crypto import VectorCommitter
+```
+
+<ResponseField name="VectorCommitter.commit" type="method">
+  Commit to vector of values.
+  
+  **Parameters:**
+  - `values` (list[bytes]): Values
+  
+  **Returns:** `VectorCommitment`
+</ResponseField>
+
+<ResponseField name="VectorCommitter.open" type="method">
+  Open specific position.
+  
+  **Parameters:**
+  - `index` (int): Position to open
+  
+  **Returns:** `VectorOpening`
+</ResponseField>
+
+<ResponseField name="VectorCommitter.verify" type="method">
+  Verify opening.
+  
+  **Parameters:**
+  - `root` (bytes): Commitment root
+  - `index` (int): Position
+  - `value` (bytes): Claimed value
+  - `path` (list[bytes]): Merkle path
+  
+  **Returns:** `bool`
+</ResponseField>
+
+---
+
+## Types
+
+### DilithiumKeyPair
+
+```python
+@dataclass
+class DilithiumKeyPair:
+    public_key: DilithiumPublicKey
+    private_key: DilithiumPrivateKey
+```
+
+### BBSSignature
+
+```python
+@dataclass
+class BBSSignature:
+    A: bytes
+    e: bytes
+    s: bytes
+```
+
+### BBSProof
+
+```python
+@dataclass
+class BBSProof:
+    disclosed_indices: list[int]
+    disclosed_messages: list[bytes]
+    proof_bytes: bytes
+    nonce: bytes
+```
+
+### AccumulatorState
+
+```python
+@dataclass
+class AccumulatorState:
+    value: int
+    epoch: int
+```
+
+### Witness
+
+```python
+@dataclass
+class Witness:
+    value: int
+    element: int
+    epoch: int
+```

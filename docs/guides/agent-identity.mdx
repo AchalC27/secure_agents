@@ -1,0 +1,290 @@
+---
+title: Creating Agent Identities
+description: 'Step-by-step guide for bootstrapping secure agent identities'
+---
+
+This guide walks you through creating a complete cryptographic identity for an AI agent.
+
+## Overview
+
+An agent identity in Arbiter consists of:
+
+<CardGroup cols={3}>
+  <Card title="Keys" icon="key">
+    Authentication, encryption, and assertion keys
+  </Card>
+  <Card title="DID" icon="fingerprint">
+    Decentralized identifier derived from keys
+  </Card>
+  <Card title="Credential" icon="id-card">
+    Verifiable claims about the agent
+  </Card>
+</CardGroup>
+
+---
+
+## Prerequisites
+
+```python
+# Install arbiter
+pip install arbiter
+```
+
+---
+
+## Step 1: Generate Keys
+
+Every agent needs cryptographic keys:
+
+```python
+from arbiter import Identity
+
+# Create key manager
+key_manager = Identity.create_key_manager()
+
+# Authentication key (Dilithium - post-quantum)
+auth_key = key_manager.generate_authentication_key()
+
+# Encryption key (Kyber - for secure channels)
+enc_key = key_manager.generate_encryption_key()
+
+# Assertion key (for signing claims)
+assertion_key = key_manager.generate_assertion_key()
+
+print(f"Generated keys:")
+print(f"  Auth: {auth_key.key_id}")
+print(f"  Encryption: {enc_key.key_id}")
+print(f"  Assertion: {assertion_key.key_id}")
+```
+
+<Tip>
+Keys are generated using NIST-standardized post-quantum algorithms (Dilithium and Kyber).
+</Tip>
+
+---
+
+## Step 2: Create DID
+
+Create a Decentralized Identifier from the public key:
+
+```python
+from arbiter import DID
+from arbiter.identity import DIDDocumentBuilder
+
+# Create DID from authentication public key
+did = DID.from_public_key(auth_key.public_key.public_key_bytes)
+print(f"Agent DID: {did.did_string}")
+
+# Build DID document with all keys
+builder = DIDDocumentBuilder(did)
+builder.add_authentication_key(
+    key_bytes=auth_key.public_key.public_key_bytes,
+    key_id="key-1",
+)
+builder.add_key_agreement_key(
+    key_bytes=enc_key.public_key.public_key_bytes,
+    key_id="enc-1",
+)
+builder.add_assertion_key(
+    key_bytes=assertion_key.public_key.public_key_bytes,
+    key_id="assert-1",
+)
+
+document = builder.build()
+```
+
+### DID Document
+
+```json
+{
+  "@context": ["https://www.w3.org/ns/did/v1"],
+  "id": "did:arbiter:2N4Q...",
+  "verificationMethod": [
+    {
+      "id": "did:arbiter:2N4Q...#key-1",
+      "type": "Dilithium3VerificationKey2024",
+      "publicKeyMultibase": "z..."
+    }
+  ],
+  "authentication": ["#key-1"],
+  "keyAgreement": ["#enc-1"],
+  "assertionMethod": ["#assert-1"]
+}
+```
+
+---
+
+## Step 3: Publish to Registry (Optional)
+
+For resolution by other agents:
+
+```python
+from arbiter.identity import InMemoryRegistry
+
+registry = InMemoryRegistry()
+
+# Sign document
+signature = key_manager.sign(auth_key.key_id, document.to_bytes())
+
+# Publish
+result = registry.publish_did(document, signature)
+print(f"Published: {result.success}")
+```
+
+---
+
+## Step 4: Get Credential
+
+Request a verifiable credential from a trusted issuer:
+
+```python
+from arbiter import Identity
+
+# Connect to issuer
+issuer = Identity.create_issuer("did:arbiter:trusted-issuer")
+
+# Request credential
+bundle = issuer.issue_agent_identity_credential(
+    subject_did=did.did_string,
+    agent_name="ResearchBot",
+    agent_type="researcher",
+    capabilities=["search", "analyze", "summarize"],
+)
+
+print(f"Credential issued: {bundle.credential.id}")
+```
+
+---
+
+## Complete Agent Class
+
+Here's a complete agent class you can use:
+
+```python
+from arbiter import Identity, DID
+from arbiter.identity import DIDDocumentBuilder
+
+class SecureAgent:
+    """An agent with complete cryptographic identity."""
+    
+    def __init__(self, name: str, agent_type: str, capabilities: list[str]):
+        self.name = name
+        self.agent_type = agent_type
+        self.capabilities = capabilities
+        
+        # Initialize identity
+        self._setup_identity()
+    
+    def _setup_identity(self):
+        # Generate keys
+        self.key_manager = Identity.create_key_manager()
+        self.auth_key = self.key_manager.generate_authentication_key()
+        self.enc_key = self.key_manager.generate_encryption_key()
+        
+        # Create DID
+        self.did = DID.from_public_key(
+            self.auth_key.public_key.public_key_bytes
+        )
+        
+        # Build document
+        builder = DIDDocumentBuilder(self.did)
+        builder.add_authentication_key(
+            self.auth_key.public_key.public_key_bytes
+        )
+        builder.add_key_agreement_key(
+            self.enc_key.public_key.public_key_bytes
+        )
+        self.document = builder.build()
+        
+        # Credential will be set later
+        self.credential_bundle = None
+    
+    def request_credential(self, issuer):
+        """Request identity credential from issuer."""
+        self.credential_bundle = issuer.issue_agent_identity_credential(
+            subject_did=self.did.did_string,
+            agent_name=self.name,
+            agent_type=self.agent_type,
+            capabilities=self.capabilities,
+        )
+        return self.credential_bundle
+    
+    @property
+    def did_string(self) -> str:
+        return self.did.did_string
+    
+    @property
+    def is_credentialed(self) -> bool:
+        return self.credential_bundle is not None
+
+
+# Usage
+agent = SecureAgent(
+    name="ResearchBot",
+    agent_type="researcher",
+    capabilities=["search", "analyze"],
+)
+
+issuer = Identity.create_issuer("did:arbiter:issuer")
+agent.request_credential(issuer)
+
+print(f"Agent ready: {agent.did_string}")
+print(f"Credential: {agent.credential_bundle.credential.id}")
+```
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Secure Key Storage">
+    In production, use HSM or secure enclave:
+    
+    ```python
+    from arbiter.identity import HSMKeyStorage
+    
+    key_manager = KeyManager(storage=HSMKeyStorage())
+    ```
+  </Accordion>
+  
+  <Accordion title="Key Rotation">
+    Rotate keys periodically:
+    
+    ```python
+    # Generate new keys
+    new_auth_key = key_manager.generate_authentication_key()
+    
+    # Update DID document
+    builder.rotate_authentication_key(new_auth_key)
+    document = builder.build()
+    
+    # Republish
+    registry.update_did(document, signature)
+    ```
+  </Accordion>
+  
+  <Accordion title="Multiple Credentials">
+    Agents can have multiple credentials:
+    
+    ```python
+    identity_cred = issuer.issue_agent_identity_credential(...)
+    capability_cred = issuer.issue_capability_credential(
+        subject_did=did.did_string,
+        capabilities=["admin", "deploy"],
+    )
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Issue Credentials" icon="id-card" href="/guides/issuing-credentials">
+    Learn to issue credentials
+  </Card>
+  <Card title="Policy Configuration" icon="lock" href="/guides/policy-configuration">
+    Configure access control
+  </Card>
+</CardGroup>

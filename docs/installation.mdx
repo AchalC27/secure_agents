@@ -1,0 +1,221 @@
+---
+title: Installation
+description: 'Install Arbiter and configure your environment'
+---
+
+## Requirements
+
+<Info>
+**System Requirements:**
+- Python 3.9 or higher
+- pip, uv, or Poetry package manager
+- 512MB RAM minimum
+</Info>
+
+## Installation Methods
+
+<Tabs>
+  <Tab title="pip (Standard)">
+    The simplest way to install Arbiter:
+    
+    ```bash
+    pip install arbiter
+    ```
+    
+    For development with extra dependencies:
+    
+    ```bash
+    pip install arbiter[dev]
+    ```
+  </Tab>
+  
+  <Tab title="uv (Recommended)">
+    Using uv for faster dependency resolution:
+    
+    ```bash
+    # Install uv if you haven't
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    
+    # Add arbiter to your project
+    uv add arbiter
+    ```
+  </Tab>
+  
+  <Tab title="Poetry">
+    Using Poetry for dependency management:
+    
+    ```bash
+    poetry add arbiter
+    ```
+  </Tab>
+  
+  <Tab title="From Source">
+    Clone and install from source:
+    
+    ```bash
+    git clone https://github.com/yourusername/arbiter.git
+    cd arbiter
+    pip install -e .
+    ```
+  </Tab>
+</Tabs>
+
+## Verify Installation
+
+Check that Arbiter is installed correctly:
+
+```python
+import arbiter
+
+print(f"Arbiter version: {arbiter.__version__}")
+# Output: Arbiter version: 0.1.0
+```
+
+Or from the command line:
+
+```bash
+python -c "import arbiter; print(arbiter.__version__)"
+```
+
+## Optional Dependencies
+
+### CrewAI Integration
+
+For multi-agent simulations with CrewAI:
+
+```bash
+pip install arbiter[crew]
+```
+
+<Warning>
+CrewAI integration requires an LLM API key. Set either OpenAI or MegaLLM in your environment:
+
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+# OR
+export MEGALLM_API_KEY="your-megallm-key-here"
+```
+</Warning>
+
+### Development Tools
+
+For running tests and development:
+
+```bash
+pip install arbiter[dev]
+```
+
+This includes:
+- pytest for testing
+- mypy for type checking
+- ruff for linting
+
+## Environment Configuration
+
+### Environment Variables
+
+Create a `.env` file in your project root:
+
+```bash
+# .env
+ARBITER_LOG_LEVEL=INFO
+ARBITER_KEY_STORAGE_PATH=./keys
+
+# Optional: For CrewAI simulations (OpenAI or MegaLLM)
+OPENAI_API_KEY=your-api-key
+# MEGALLM_API_KEY=your-megallm-key
+```
+
+### Configuration File
+
+Arbiter can also be configured via `arbiter.toml`:
+
+```toml
+[arbiter]
+log_level = "INFO"
+
+[arbiter.crypto]
+dilithium_level = 3   # NIST security level (2, 3, or 5)
+kyber_level = 768     # Kyber-512, 768, or 1024
+accumulator_bits = 2048
+
+[arbiter.identity]
+did_method = "arbiter"
+key_storage = "memory"  # or "file"
+
+[arbiter.integrity]
+default_policy_combining = "deny_unless_permit"
+```
+
+## Project Structure
+
+After installation, a typical project structure:
+
+```
+my-agent-project/
+├── .env                    # Environment variables
+├── arbiter.toml           # Optional configuration
+├── main.py                # Your application
+├── policies/              # ABAC policy definitions
+│   └── access.py
+└── keys/                  # Key storage (if using file storage)
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Import Error: No module named 'arbiter'">
+    Ensure you've activated your virtual environment:
+    
+    ```bash
+    # Create and activate venv
+    python -m venv .venv
+    source .venv/bin/activate  # Linux/Mac
+    .venv\Scripts\activate     # Windows
+    
+    # Reinstall
+    pip install arbiter
+    ```
+  </Accordion>
+  
+  <Accordion title="Cryptography Installation Fails">
+    If you see errors related to cryptography libraries, install system dependencies:
+    
+    **Ubuntu/Debian:**
+    ```bash
+    sudo apt-get install build-essential libssl-dev libffi-dev python3-dev
+    ```
+    
+    **macOS:**
+    ```bash
+    brew install openssl
+    ```
+  </Accordion>
+  
+  <Accordion title="CrewAI Import Error">
+    Make sure you installed the crew extras:
+    
+    ```bash
+    pip install arbiter[crew]
+    ```
+    
+    And set your API key:
+    
+    ```bash
+    export OPENAI_API_KEY="your-key"
+    # or
+    export MEGALLM_API_KEY="your-key"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first secure agent
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture/overview">
+    Understand Arbiter's design
+  </Card>
+</CardGroup>

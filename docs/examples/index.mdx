@@ -1,0 +1,370 @@
+---
+title: Code Examples
+description: 'Complete working examples and use cases'
+---
+
+This page provides complete, runnable examples for common Arbiter use cases.
+
+---
+
+## Example 1: Complete Agent Setup
+
+A full example of creating an agent with identity and credentials:
+
+```python
+from arbiter import Identity, DID, Integrity
+from arbiter.identity import DIDDocumentBuilder, ProofGenerator, create_proof_request
+
+# === 1. CREATE AGENT KEYS ===
+key_manager = Identity.create_key_manager()
+auth_key = key_manager.generate_authentication_key()
+enc_key = key_manager.generate_encryption_key()
+
+# === 2. CREATE DID ===
+did = DID.from_public_key(auth_key.public_key.public_key_bytes)
+print(f"Agent DID: {did.did_string}")
+
+# Build DID Document
+builder = DIDDocumentBuilder(did)
+builder.add_authentication_key(auth_key.public_key.public_key_bytes)
+builder.add_key_agreement_key(enc_key.public_key.public_key_bytes)
+document = builder.build()
+
+# === 3. GET CREDENTIAL ===
+issuer = Identity.create_issuer("did:arbiter:issuer")
+bundle = issuer.issue_agent_identity_credential(
+    subject_did=did.did_string,
+    agent_name="ResearchBot",
+    agent_type="researcher",
+    capabilities=["search", "analyze"],
+)
+print(f"Credential: {bundle.credential.id}")
+
+# === 4. CREATE PRESENTATION ===
+generator = ProofGenerator(
+    credential=bundle.credential,
+    bbs_signature=bundle.raw_signature,
+    witness=bundle.witness,
+)
+
+presentation = generator.generate_presentation(
+    request=create_proof_request(
+        challenge="verification-challenge",
+        domain="service.example.com",
+        required_attributes=["agentType"],
+    ),
+    issuer_public_key=issuer.bbs_keypair.public_key,
+    accumulator_value=issuer.revocation_manager.get_current_accumulator(),
+)
+
+# === 5. VERIFY ===
+hub = Identity.create_verification_hub()
+result = hub.verify_presentation(
+    presentation=presentation,
+    expected_challenge="verification-challenge",
+    expected_domain="service.example.com",
+    issuer_public_key=issuer.bbs_keypair.public_key,
+    accumulator_value=issuer.revocation_manager.get_current_accumulator(),
+)
+
+print(f"Trust: {result.decision}")  # TRUSTED
+print(f"Disclosed: {result.disclosed_attributes}")  # {'agentType': 'researcher'}
+```
+
+---
+
+## Example 2: Multi-Agent Collaboration
+
+Two agents authenticating each other before collaborating:
+
+```python
+from arbiter import Identity
+from arbiter.identity import ProofGenerator, create_proof_request
+import secrets
+
+# === SETUP TWO AGENTS ===
+issuer = Identity.create_issuer("did:arbiter:central-issuer")
+
+# Agent Alpha
+bundle_alpha = issuer.issue_agent_identity_credential(
+    subject_did="did:arbiter:alpha",
+    agent_name="Alpha",
+    agent_type="analyzer",
+    capabilities=["analyze"],
+)
+
+# Agent Beta
+bundle_beta = issuer.issue_agent_identity_credential(
+    subject_did="did:arbiter:beta",
+    agent_name="Beta",
+    agent_type="searcher",
+    capabilities=["search"],
+)
+
+# === MUTUAL AUTHENTICATION ===
+# Generate challenges
+challenge_alpha = secrets.token_hex(32)
+challenge_beta = secrets.token_hex(32)
+
+# Alpha creates presentation for Beta
+gen_alpha = ProofGenerator(
+    bundle_alpha.credential, bundle_alpha.raw_signature, bundle_alpha.witness
+)
+presentation_alpha = gen_alpha.generate_presentation(
+    request=create_proof_request(challenge=challenge_beta, domain="beta"),
+    issuer_public_key=issuer.bbs_keypair.public_key,
+    accumulator_value=issuer.revocation_manager.get_current_accumulator(),
+)
+
+# Beta creates presentation for Alpha
+gen_beta = ProofGenerator(
+    bundle_beta.credential, bundle_beta.raw_signature, bundle_beta.witness
+)
+presentation_beta = gen_beta.generate_presentation(
+    request=create_proof_request(challenge=challenge_alpha, domain="alpha"),
+    issuer_public_key=issuer.bbs_keypair.public_key,
+    accumulator_value=issuer.revocation_manager.get_current_accumulator(),
+)
+
+# Verify each other
+hub = Identity.create_verification_hub()
+acc_value = issuer.revocation_manager.get_current_accumulator()
+
+result_beta = hub.verify_presentation(
+    presentation_beta, challenge_alpha, "alpha",
+    issuer.bbs_keypair.public_key, acc_value
+)
+result_alpha = hub.verify_presentation(
+    presentation_alpha, challenge_beta, "beta",
+    issuer.bbs_keypair.public_key, acc_value
+)
+
+if result_alpha.is_trusted and result_beta.is_trusted:
+    print("✓ Mutual authentication successful!")
+    print(f"  Alpha sees Beta as: {result_beta.disclosed_attributes}")
+    print(f"  Beta sees Alpha as: {result_alpha.disclosed_attributes}")
+```
+
+---
+
+## Example 3: Access Control with Policies
+
+Complete ABAC policy enforcement:
+
+```python
+from arbiter import Identity, Integrity
+from arbiter.identity import ProofGenerator, create_proof_request
+from arbiter.common import Policy, PolicyRule, Effect, Condition, ConditionOperator
+
+# === SETUP ===
+issuer = Identity.create_issuer("did:arbiter:issuer")
+
+# Create agent with researcher role
+bundle = issuer.issue_agent_identity_credential(
+    subject_did="did:arbiter:agent",
+    agent_name="ResearchBot",
+    agent_type="researcher",
+    capabilities=["search", "analyze"],
+)
+
+# === DEFINE POLICIES ===
+pap = Integrity.create_policy_admin()
+
+# Research data policy
+pap.add_policy(Policy(
+    policy_id="research-policy",
+    target={"resource.type": "research"},
+    combining_algorithm="FIRST_APPLICABLE",
+    rules=[
+        PolicyRule(
+            rule_id="researcher-access",
+            effect=Effect.PERMIT,
+            conditions=[
+                Condition("subject", "agentType", ConditionOperator.EQUALS, "researcher"),
+                Condition("action", "id", ConditionOperator.IN, ["read", "search"]),
+            ],
+        ),
+        PolicyRule(
+            rule_id="default-deny",
+            effect=Effect.DENY,
+            conditions=[],
+        ),
+    ],
+))
+
+# === CREATE PRESENTATION ===
+generator = ProofGenerator(
+    bundle.credential, bundle.raw_signature, bundle.witness
+)
+presentation = generator.generate_presentation(
+    request=create_proof_request(
+        challenge="access-request",
+        required_attributes=["agentType"],  # Disclose for ABAC
+    ),
+    issuer_public_key=issuer.bbs_keypair.public_key,
+    accumulator_value=issuer.revocation_manager.get_current_accumulator(),
+)
+
+# === ENFORCE ACCESS ===
+pep = Integrity.create_enforcement_point()
+
+# Test: READ research data
+result = pep.enforce(
+    subject_did="did:arbiter:agent",
+    resource_id="data/papers",
+    action="read",
+    presentation=presentation,
+    resource_attributes={"type": "research"},
+)
+print(f"Read research: {'✓ Granted' if result.permitted else '✗ Denied'}")
+
+# Test: DELETE research data
+result = pep.enforce(
+    subject_did="did:arbiter:agent",
+    resource_id="data/papers",
+    action="delete",
+    presentation=presentation,
+    resource_attributes={"type": "research"},
+)
+print(f"Delete research: {'✓ Granted' if result.permitted else '✗ Denied'}")
+```
+
+Output:
+```
+Read research: ✓ Granted
+Delete research: ✗ Denied
+```
+
+---
+
+## Example 4: Privacy-Preserving Aggregation
+
+Using Paillier encryption for secure aggregation:
+
+```python
+from arbiter.integrity.homomorphic import (
+    generate_keypair,
+    encrypt,
+    decrypt,
+    encrypted_sum,
+)
+
+# === AGGREGATOR SETUP ===
+keypair = generate_keypair(key_size=2048)
+pk = keypair.public_key
+
+# === AGENTS ENCRYPT THEIR SCORES ===
+# Each agent has a private trust score
+agent_scores = {
+    "Alpha": 85,
+    "Beta": 92,
+    "Gamma": 78,
+    "Delta": 88,
+}
+
+# Encrypt without revealing values
+encrypted_scores = {}
+for agent, score in agent_scores.items():
+    encrypted_scores[agent] = encrypt(pk, score)
+    print(f"{agent} encrypted their score (value hidden)")
+
+# === AGGREGATE WITHOUT SEEING VALUES ===
+enc_total = encrypted_sum(list(encrypted_scores.values()))
+
+# Only aggregator decrypts total
+total = decrypt(keypair.private_key, enc_total)
+average = total / len(agent_scores)
+
+print(f"\nAggregation complete:")
+print(f"  Total: {total}")
+print(f"  Average: {average}")
+print(f"  Individual scores were NEVER revealed!")
+```
+
+---
+
+## Example 5: Credential Revocation
+
+Revoking a credential and detecting it:
+
+```python
+from arbiter import Identity
+from arbiter.identity import ProofGenerator, create_proof_request
+
+# === SETUP ===
+issuer = Identity.create_issuer("did:arbiter:issuer")
+
+# Issue credential
+bundle = issuer.issue_agent_identity_credential(
+    subject_did="did:arbiter:agent",
+    agent_name="Agent",
+    agent_type="worker",
+)
+print(f"Issued: {bundle.credential.id}")
+
+# Create presentation BEFORE revocation
+generator = ProofGenerator(
+    bundle.credential, bundle.raw_signature, bundle.witness
+)
+
+# === VERIFY BEFORE REVOCATION ===
+hub = Identity.create_verification_hub()
+acc_before = issuer.revocation_manager.get_current_accumulator()
+
+presentation = generator.generate_presentation(
+    request=create_proof_request(challenge="test1"),
+    issuer_public_key=issuer.bbs_keypair.public_key,
+    accumulator_value=acc_before,
+)
+
+result = hub.verify_presentation(
+    presentation, "test1", None,
+    issuer.bbs_keypair.public_key, acc_before
+)
+print(f"Before revocation: {result.decision}")  # TRUSTED
+
+# === REVOKE THE CREDENTIAL ===
+state = issuer.revocation_manager.revoke_credential(bundle.handler_id)
+print(f"Credential revoked at epoch {state.epoch}")
+
+# === VERIFY AFTER REVOCATION ===
+acc_after = issuer.revocation_manager.get_current_accumulator()
+
+# Old presentation with outdated witness
+result = hub.verify_presentation(
+    presentation, "test2", None,
+    issuer.bbs_keypair.public_key, acc_after  # New accumulator
+)
+print(f"After revocation: {result.decision}")  # UNTRUSTED or REVOKED
+```
+
+---
+
+## Running Examples
+
+To run these examples:
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/arbiter.git
+cd arbiter
+
+# Install dependencies
+pip install -e .
+
+# Run an example
+python examples/complete_agent.py
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get started in 5 minutes
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/identity">
+    Explore full API
+  </Card>
+</CardGroup>

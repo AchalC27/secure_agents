@@ -1,0 +1,256 @@
+---
+title: Quickstart
+description: 'Get started with Arbiter in 5 minutes'
+---
+
+## Prerequisites
+
+<Info>
+Arbiter requires Python 3.9 or higher.
+</Info>
+
+## Installation
+
+<Tabs>
+  <Tab title="pip">
+    ```bash
+    pip install arbiter
+    ```
+  </Tab>
+  <Tab title="uv">
+    ```bash
+    uv add arbiter
+    ```
+  </Tab>
+  <Tab title="Poetry">
+    ```bash
+    poetry add arbiter
+    ```
+  </Tab>
+</Tabs>
+
+## Step 1: Create an Agent Identity
+
+Every AI agent in Arbiter needs a cryptographic identity.
+
+```python
+from arbiter import Identity, DID
+
+# Create a key manager
+key_manager = Identity.create_key_manager()
+
+# Generate authentication key (Dilithium for PQC security)
+auth_key = key_manager.generate_authentication_key()
+
+# Create DID from public key
+did = DID.from_public_key(auth_key.public_key.public_key_bytes)
+print(f"Agent DID: {did.did_string}")
+# Output: Agent DID: did:arbiter:2N4Q...
+```
+
+<Note>
+The DID is deterministically derived from the agent's public key—same key always produces same DID.
+</Note>
+
+## Step 2: Issue a Credential
+
+Credentials assert verifiable claims about an agent.
+
+```python
+from arbiter import Identity
+
+# Create an issuer
+issuer = Identity.create_issuer("did:arbiter:trusted-issuer")
+
+# Issue a credential to our agent
+bundle = issuer.issue_agent_identity_credential(
+    subject_did=did.did_string,
+    agent_name="ResearchBot",
+    agent_type="researcher",
+    capabilities=["search", "analyze", "summarize"],
+)
+
+print(f"Credential ID: {bundle.credential.id}")
+print(f"Capabilities: {bundle.credential.credential_subject.claims}")
+```
+
+The returned `bundle` contains:
+- **Verifiable Credential**: The signed credential
+- **Witness**: For revocation proofs
+- **Handler Element**: Accumulator element for revocation
+
+## Step 3: Create a Zero-Knowledge Presentation
+
+Agents can present credentials without revealing all information.
+
+```python
+from arbiter.identity import ProofGenerator, create_proof_request, ProofType
+
+# Create proof generator with agent's credential
+generator = ProofGenerator(
+    credential=bundle.credential,
+    bbs_signature=bundle.raw_signature,
+    witness=bundle.witness,
+)
+
+# Create a proof request (what the verifier wants)
+request = create_proof_request(
+    challenge="unique-challenge-from-verifier",
+    domain="verifier.example.com",
+    required_proofs=[ProofType.CREDENTIAL_VALIDITY, ProofType.NON_REVOCATION],
+    required_attributes=["role"],  # Only reveal role
+)
+
+# Generate presentation (reveals only 'role', proves other capabilities via ZK)
+presentation = generator.generate_presentation(
+    request=request,
+    issuer_public_key=issuer.bbs_keypair.public_key,
+    accumulator_value=issuer.revocation_manager.get_current_accumulator(),
+)
+```
+
+## Step 4: Verify the Presentation
+
+```python
+from arbiter import Identity
+
+# Create verification hub
+hub = Identity.create_verification_hub()
+
+# Verify the presentation
+result = hub.verify_presentation(
+    presentation=presentation,
+    expected_challenge=request.challenge,
+    expected_domain=request.domain,
+    issuer_public_key=issuer.bbs_keypair.public_key,
+    accumulator_value=issuer.revocation_manager.get_current_accumulator(),
+)
+
+if result.is_trusted:
+    print("✓ Agent is trusted!")
+    print(f"  Disclosed attributes: {result.disclosed_attributes}")
+else:
+    print("✗ Verification failed:", result.failure_reason)
+```
+
+## Step 5: Enforce Access Control
+
+Use ABAC policies to control resource access.
+
+```python
+from arbiter import Integrity
+from arbiter.common import Policy, PolicyRule, Effect, Condition, ConditionOperator
+
+# Create policy enforcement point
+pep = Integrity.create_enforcement_point()
+
+# Define a policy
+policy = Policy(
+    policy_id="research-access",
+    version="1.0",
+    target={"resource.type": "research-data"},
+    rules=[
+        PolicyRule(
+            rule_id="researcher-permit",
+            effect=Effect.PERMIT,
+            conditions=[
+                Condition(
+                    attribute_category="subject",
+                    attribute_id="role",
+                    operator=ConditionOperator.EQUALS,
+                    value="researcher",
+                ),
+            ],
+        ),
+    ],
+)
+
+# Register policy
+pap = Integrity.create_policy_admin()
+pap.add_policy(policy)
+
+# Enforce access
+result = pep.enforce(
+    subject_did=did.did_string,
+    resource_id="data/research-papers",
+    action="read",
+    presentation=presentation,
+)
+
+if result.permitted:
+    print("✓ Access granted!")
+else:
+    print("✗ Access denied:", result.reason)
+```
+
+## Complete Example
+
+Here's everything together:
+
+```python
+from arbiter import Identity, Integrity, DID
+
+# === SETUP ===
+key_manager = Identity.create_key_manager()
+auth_key = key_manager.generate_authentication_key()
+did = DID.from_public_key(auth_key.public_key.public_key_bytes)
+
+# === ISSUANCE ===
+issuer = Identity.create_issuer("did:arbiter:issuer")
+bundle = issuer.issue_agent_identity_credential(
+    subject_did=did.did_string,
+    agent_name="ResearchBot",
+    agent_type="researcher",
+    capabilities=["search", "analyze"],
+)
+
+# === PRESENTATION ===
+from arbiter.identity import ProofGenerator, create_proof_request, ProofType
+
+generator = ProofGenerator(
+    credential=bundle.credential,
+    bbs_signature=bundle.raw_signature,
+    witness=bundle.witness,
+)
+
+request = create_proof_request(
+    challenge="auth-challenge-123",
+    domain="service.example.com",
+)
+
+presentation = generator.generate_presentation(
+    request=request,
+    issuer_public_key=issuer.bbs_keypair.public_key,
+    accumulator_value=issuer.revocation_manager.get_current_accumulator(),
+)
+
+# === VERIFICATION ===
+hub = Identity.create_verification_hub()
+result = hub.verify_presentation(
+    presentation=presentation,
+    expected_challenge=request.challenge,
+    expected_domain=request.domain,
+    issuer_public_key=issuer.bbs_keypair.public_key,
+    accumulator_value=issuer.revocation_manager.get_current_accumulator(),
+)
+
+print(f"Trust decision: {result.decision}")
+# Output: Trust decision: TRUSTED
+```
+
+## What's Next?
+
+<CardGroup cols={2}>
+  <Card title="Architecture Deep Dive" icon="sitemap" href="/architecture/overview">
+    Understand how Arbiter works under the hood
+  </Card>
+  <Card title="Credential Issuance Flow" icon="id-card" href="/flows/credentials">
+    Learn the complete credential lifecycle
+  </Card>
+  <Card title="ABAC Policies" icon="lock" href="/guides/policy-configuration">
+    Configure fine-grained access control
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference/identity">
+    Explore the complete API
+  </Card>
+</CardGroup>

@@ -1,0 +1,56 @@
+[project]
+name = "arbiter"
+version = "0.1.0"
+description = "Production-grade Identity + Integrity layer for autonomous AI agents"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pycryptodome>=3.20.0",
+    "phe>=1.5.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "python-dotenv>=1.0.0",
+    "numpy>=2.4.0",
+    "sentence-transformers>=3.0.0",
+    "scikit-learn>=1.5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.8.0",
+    "ruff>=0.1.0",
+]
+simulator = [
+    "crewai>=0.80.0",
+    "crewai-tools>=0.14.0",
+]
+behavior-ml = [
+    # Optional heavy deps for LSTM/Transformer sequence modeling
+    "torch>=2.2.0",
+]
+pqc = [
+    # Post-quantum cryptography - optional due to platform constraints
+    # "pqcrypto>=0.1.0",  # Uncomment when available
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["arbiter"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_test_loop_scope = "function"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

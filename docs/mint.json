@@ -1,0 +1,124 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "Arbiter",
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#6366F1",
+    "light": "#818CF8",
+    "dark": "#4F46E5",
+    "anchors": {
+      "from": "#6366F1",
+      "to": "#8B5CF6"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "GitHub",
+      "url": "https://github.com/yourusername/arbiter"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Get Started",
+    "url": "/quickstart"
+  },
+  "tabs": [
+    {
+      "name": "Documentation",
+      "url": "/"
+    },
+    {
+      "name": "API Reference",
+      "url": "/api-reference"
+    }
+  ],
+  "anchors": [
+    {
+      "name": "GitHub",
+      "icon": "github",
+      "url": "https://github.com/yourusername/arbiter"
+    },
+    {
+      "name": "Community",
+      "icon": "discord",
+      "url": "https://discord.gg/arbiter"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": [
+        "introduction",
+        "quickstart",
+        "installation"
+      ]
+    },
+    {
+      "group": "Architecture",
+      "pages": [
+        "architecture/overview",
+        "architecture/identity-layer",
+        "architecture/integrity-layer",
+        "architecture/behavior-layer",
+        "architecture/security-model"
+      ]
+    },
+    {
+      "group": "Cryptography",
+      "pages": [
+        "cryptography/pqc",
+        "cryptography/bbs-plus",
+        "cryptography/accumulators",
+        "cryptography/commitments",
+        "cryptography/paillier"
+      ]
+    },
+    {
+      "group": "Protocol Flows",
+      "pages": [
+        "flows/onboarding",
+        "flows/credentials",
+        "flows/authentication",
+        "flows/revocation",
+        "flows/access-control",
+        "flows/behavior"
+      ]
+    },
+    {
+      "group": "Guides",
+      "pages": [
+        "guides/agent-identity",
+        "guides/issuing-credentials",
+        "guides/policy-configuration"
+      ]
+    },
+    {
+      "group": "Examples",
+      "pages": [
+        "examples/index"
+      ]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api-reference/identity",
+        "api-reference/integrity",
+        "api-reference/behavior",
+        "api-reference/crypto"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com/yourusername/arbiter",
+    "discord": "https://discord.gg/arbiter"
+  },
+  "modeToggle": {
+    "default": "dark"
+  },
+  "feedback": {
+    "thumbsRating": true
+  }
+}

@@ -1,0 +1,423 @@
+---
+title: Policy Configuration
+description: 'Configure ABAC policies for fine-grained access control'
+---
+
+Learn how to define and configure Attribute-Based Access Control policies for your system.
+
+## Overview
+
+ABAC policies in Arbiter control:
+- Who can access what resources
+- What actions are permitted
+- Under what conditions access is granted
+
+---
+
+## Policy Structure
+
+A policy consists of:
+
+```python
+Policy(
+    policy_id="unique-id",           # Unique identifier
+    version="1.0",                   # Version for tracking
+    target={...},                    # When does this policy apply?
+    combining_algorithm="...",       # How to combine rule results
+    rules=[...],                     # The actual rules
+)
+```
+
+---
+
+## Creating a Basic Policy
+
+```python
+from arbiter import Integrity
+from arbiter.common import (
+    Policy, PolicyRule, Effect,
+    Condition, ConditionOperator
+)
+
+pap = Integrity.create_policy_admin()
+
+policy = Policy(
+    policy_id="research-data-access",
+    version="1.0",
+    target={"resource.type": "research-data"},
+    rules=[
+        PolicyRule(
+            rule_id="researcher-read",
+            effect=Effect.PERMIT,
+            conditions=[
+                Condition(
+                    attribute_category="subject",
+                    attribute_id="role",
+                    operator=ConditionOperator.EQUALS,
+                    value="researcher",
+                ),
+            ],
+        ),
+    ],
+)
+
+pap.add_policy(policy)
+```
+
+---
+
+## Policy Targets
+
+Targets define when a policy applies:
+
+```python
+# Match by resource type
+target={"resource.type": "research-data"}
+
+# Match by action
+target={"action.id": "delete"}
+
+# Match by multiple attributes
+target={
+    "resource.type": "confidential",
+    "resource.department": "engineering",
+}
+```
+
+---
+
+## Conditions
+
+### Condition Structure
+
+```python
+Condition(
+    attribute_category="subject",    # subject, resource, action, environment
+    attribute_id="role",             # Attribute name
+    operator=ConditionOperator.EQUALS,
+    value="researcher",
+)
+```
+
+### Available Operators
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `EQUALS` | Exact match | `role == "admin"` |
+| `NOT_EQUALS` | Not equal | `status != "revoked"` |
+| `CONTAINS` | List contains | `caps contains "search"` |
+| `IN` | Value in list | `role in ["admin", "mod"]` |
+| `GREATER_THAN` | Numeric &gt; | `level > 3` |
+| `GREATER_EQUAL` | Numeric &gt;= | `level >= 3` |
+| `LESS_THAN` | Numeric &lt; | `level < 10` |
+| `LESS_EQUAL` | Numeric &lt;= | `level <= 10` |
+| `REGEX_MATCH` | Pattern match | `email ~ ".*@co.com"` |
+| `EXISTS` | Attribute exists | `clearance exists` |
+
+### Multiple Conditions (AND)
+
+All conditions must be true:
+
+```python
+PolicyRule(
+    rule_id="senior-researcher",
+    effect=Effect.PERMIT,
+    conditions=[
+        Condition("subject", "role", ConditionOperator.EQUALS, "researcher"),
+        Condition("subject", "level", ConditionOperator.GREATER_EQUAL, 3),
+        Condition("action", "id", ConditionOperator.IN, ["read", "search"]),
+    ],
+)
+```
+
+---
+
+## Combining Algorithms
+
+How multiple rules/policies are combined:
+
+<Tabs>
+  <Tab title="DENY_OVERRIDES">
+    Any DENY wins. Most restrictive.
+    
+    ```python
+    policy = Policy(
+        combining_algorithm="DENY_OVERRIDES",
+        ...
+    )
+    ```
+    
+    | Rules | Result |
+    |-------|--------|
+    | PERMIT, PERMIT, DENY | DENY |
+    | PERMIT, PERMIT | PERMIT |
+  </Tab>
+  
+  <Tab title="PERMIT_OVERRIDES">
+    Any PERMIT wins. Most permissive.
+    
+    ```python
+    policy = Policy(
+        combining_algorithm="PERMIT_OVERRIDES",
+        ...
+    )
+    ```
+    
+    | Rules | Result |
+    |-------|--------|
+    | DENY, DENY, PERMIT | PERMIT |
+    | DENY, DENY | DENY |
+  </Tab>
+  
+  <Tab title="FIRST_APPLICABLE">
+    First matching rule wins. Order matters.
+    
+    ```python
+    policy = Policy(
+        combining_algorithm="FIRST_APPLICABLE",
+        rules=[
+            rule_admin_permit,   # Checked first
+            rule_default_deny,   # Fallback
+        ],
+    )
+    ```
+  </Tab>
+  
+  <Tab title="DENY_UNLESS_PERMIT">
+    Default DENY unless explicit PERMIT.
+    
+    ```python
+    policy = Policy(
+        combining_algorithm="DENY_UNLESS_PERMIT",
+        ...
+    )
+    ```
+    
+    | Rules | Result |
+    |-------|--------|
+    | No PERMIT found | DENY |
+    | At least one PERMIT | PERMIT |
+  </Tab>
+</Tabs>
+
+---
+
+## Common Policy Patterns
+
+### Role-Based Access
+
+```python
+policy = Policy(
+    policy_id="role-based",
+    target={"resource.type": "api"},
+    rules=[
+        PolicyRule(
+            rule_id="admin-full-access",
+            effect=Effect.PERMIT,
+            conditions=[
+                Condition("subject", "role", ConditionOperator.EQUALS, "admin"),
+            ],
+        ),
+        PolicyRule(
+            rule_id="user-read-only",
+            effect=Effect.PERMIT,
+            conditions=[
+                Condition("subject", "role", ConditionOperator.EQUALS, "user"),
+                Condition("action", "id", ConditionOperator.EQUALS, "read"),
+            ],
+        ),
+        PolicyRule(
+            rule_id="default-deny",
+            effect=Effect.DENY,
+            conditions=[],  # Always matches
+        ),
+    ],
+)
+```
+
+### Time-Based Access
+
+```python
+PolicyRule(
+    rule_id="business-hours",
+    effect=Effect.PERMIT,
+    conditions=[
+        Condition("subject", "role", ConditionOperator.EQUALS, "employee"),
+        Condition("environment", "hour", ConditionOperator.GREATER_EQUAL, 9),
+        Condition("environment", "hour", ConditionOperator.LESS_THAN, 17),
+    ],
+)
+```
+
+### Capability-Based Access
+
+```python
+PolicyRule(
+    rule_id="search-capability",
+    effect=Effect.PERMIT,
+    conditions=[
+        Condition(
+            "subject", "capabilities", 
+            ConditionOperator.CONTAINS, "search"
+        ),
+        Condition("action", "id", ConditionOperator.EQUALS, "search"),
+    ],
+)
+```
+
+### Resource Owner Access
+
+```python
+PolicyRule(
+    rule_id="owner-access",
+    effect=Effect.PERMIT,
+    conditions=[
+        Condition(
+            "subject", "did",
+            ConditionOperator.EQUALS,
+            "${resource.owner}"  # Dynamic reference
+        ),
+    ],
+)
+```
+
+---
+
+## Policy Management
+
+### Adding Policies
+
+```python
+pap.add_policy(policy)
+```
+
+### Updating Policies
+
+```python
+updated_policy = Policy(
+    policy_id="research-data-access",  # Same ID
+    version="1.1",                      # New version
+    ...
+)
+pap.update_policy(updated_policy)
+```
+
+### Removing Policies
+
+```python
+pap.remove_policy("research-data-access")
+```
+
+### Listing Policies
+
+```python
+policies = pap.list_policies()
+for p in policies:
+    print(f"{p.policy_id} v{p.version}")
+```
+
+---
+
+## Testing Policies
+
+```python
+from arbiter.integrity import PolicyDecisionPoint
+
+pdp = PolicyDecisionPoint()
+
+# Create test context
+test_context = {
+    "subject": {"role": "researcher", "level": 3},
+    "resource": {"type": "research-data"},
+    "action": {"id": "read"},
+    "environment": {"hour": 14},
+}
+
+# Test evaluation
+decision = pdp.evaluate(
+    policies=[policy],
+    context=test_context,
+)
+
+print(f"Decision: {decision.effect}")
+print(f"Matched rule: {decision.rule_id}")
+```
+
+---
+
+## Complete Example
+
+```python
+from arbiter import Integrity
+from arbiter.common import Policy, PolicyRule, Effect, Condition, ConditionOperator
+
+# Initialize
+pap = Integrity.create_policy_admin()
+pep = Integrity.create_enforcement_point()
+
+# Define comprehensive policy
+data_access_policy = Policy(
+    policy_id="data-access-control",
+    version="1.0",
+    target={"resource.type": "data"},
+    combining_algorithm="FIRST_APPLICABLE",
+    rules=[
+        # Admins can do anything
+        PolicyRule(
+            rule_id="admin-full",
+            effect=Effect.PERMIT,
+            conditions=[
+                Condition("subject", "role", ConditionOperator.EQUALS, "admin"),
+            ],
+        ),
+        # Researchers can read/search
+        PolicyRule(
+            rule_id="researcher-read",
+            effect=Effect.PERMIT,
+            conditions=[
+                Condition("subject", "role", ConditionOperator.EQUALS, "researcher"),
+                Condition("action", "id", ConditionOperator.IN, ["read", "search"]),
+            ],
+        ),
+        # No one can delete
+        PolicyRule(
+            rule_id="no-delete",
+            effect=Effect.DENY,
+            conditions=[
+                Condition("action", "id", ConditionOperator.EQUALS, "delete"),
+            ],
+        ),
+        # Default deny
+        PolicyRule(
+            rule_id="default-deny",
+            effect=Effect.DENY,
+            conditions=[],
+        ),
+    ],
+)
+
+pap.add_policy(data_access_policy)
+
+# Use it
+result = pep.enforce(
+    subject_did="did:arbiter:researcher",
+    resource_id="data/papers",
+    action="read",
+    presentation=presentation,
+)
+
+print(f"Access: {'Granted' if result.permitted else 'Denied'}")
+```
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Access Control Flow" icon="arrows-rotate" href="/flows/access-control">
+    Full ABAC evaluation flow
+  </Card>
+  <Card title="Integrity Layer" icon="shield" href="/architecture/integrity-layer">
+    Architecture deep dive
+  </Card>
+</CardGroup>
