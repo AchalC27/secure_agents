@@ -1,105 +1,37 @@
 ---
 title: Behavior API
-description: 'API reference for the Behavior monitoring layer'
+description: 'Comprehensive API reference for the Behavior Layer monitoring system'
 ---
 
-## High-Level API
+## Overview
 
-The `Behavior` class provides convenient factory methods for creating behavior monitoring components.
+The Behavior Layer provides real-time runtime monitoring of AI agent activities, detecting anomalous behavior patterns through deterministic on-host detection and ML-powered semantic analysis, with automatic credential revocation for critical threats.
 
-### Behavior.create_daemon()
-
-Create a behavior monitoring daemon with optional revocation integration.
-
-```python
-from arbiter import Behavior, Identity
-
-# Create with full revocation integration
-revocation = Identity.create_revocation_manager()
-daemon = Behavior.create_daemon(
-    revocation_manager=revocation,
-    revocation_callback=None,
-    watchdog_threshold=0.8,
-    enable_async=True,
-)
-daemon.start()
-```
-
-**Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `revocation_manager` | `RevocationManager` | `None` | Manager for credential revocation |
-| `revocation_callback` | `Callable[[str, str], None]` | `None` | Custom revocation handler |
-| `watchdog_threshold` | `float` | `0.8` | Risk score for ML classification |
-| `enable_async` | `bool` | `True` | Run in background thread |
-
-**Returns:** `BehaviorDaemon`
-
-### Behavior.create_event_bus()
-
-Create an event bus for event normalization.
-
-```python
-event_bus = Behavior.create_event_bus()
-```
-
-**Returns:** `EventBus`
-
-### Behavior.create_profile_store()
-
-Create a profile store for behavioral baselines.
-
-```python
-profile_store = Behavior.create_profile_store(
-    alpha=0.2,
-    history_size=20,
-)
-```
-
-**Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `alpha` | `float` | `0.2` | EWMA smoothing factor |
-| `history_size` | `int` | `20` | Events to keep per agent |
-
-**Returns:** `ProfileStore`
-
-### Behavior.create_policy_engine()
-
-Create a policy engine with custom thresholds.
-
-```python
-policy = Behavior.create_policy_engine(
-    throttle_threshold=0.60,
-    quarantine_threshold=0.75,
-    honeypot_threshold=0.90,
-    revocation_threshold=0.95,
-)
-```
-
-**Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `throttle_threshold` | `float` | `0.60` | Risk score for rate limiting |
-| `quarantine_threshold` | `float` | `0.75` | Risk score for isolation |
-| `honeypot_threshold` | `float` | `0.90` | Risk score for deception |
-| `revocation_threshold` | `float` | `0.95` | Risk score for revocation |
-
-**Returns:** `PolicyEngine`
+**Core Components:**
+- **BehaviorDaemon**: Main orchestration engine for the monitoring pipeline
+- **EventBus**: Event normalization and enrichment
+- **ProfileStore**: Per-agent behavioral baseline tracking
+- **OnHostDetectors**: Fast, deterministic anomaly detection
+- **CentralDetector**: ML-powered semantic drift analysis
+- **Watchdog**: Few-shot attack classification
+- **PolicyEngine**: Deterministic enforcement decision logic
 
 ---
 
 ## BehaviorDaemon
 
-The main daemon for behavior monitoring.
+The primary interface for behavior monitoring integration.
 
 ### Constructor
 
 ```python
 from arbiter.behavior import BehaviorDaemon
+from arbiter.identity import RevocationManager
 
+# Initialize with revocation integration
+revocation = RevocationManager.initialize_system()
 daemon = BehaviorDaemon(
-    revocation_manager=None,
+    revocation_manager=revocation,
     revocation_callback=None,
     watchdog_threshold=0.8,
     process_interval=0.1,
@@ -107,19 +39,40 @@ daemon = BehaviorDaemon(
 )
 ```
 
+**Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `revocation_manager` | `RevocationManager` | `None` | Manager for immediate credential revocation on critical threats |
+| `revocation_callback` | `Callable[[str, str], None]` | `None` | Custom callback invoked on revocation: `callback(handler_id, reason)` |
+| `watchdog_threshold` | `float` | `0.8` | Risk score threshold for invoking ML-based watchdog |
+| `process_interval` | `float` | `0.1` | Background processing cycle interval in seconds |
+| `enable_async` | `bool` | `True` | Run processing in background thread; if `False`, events processed synchronously |
+
+**Attributes:**
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `event_bus` | `EventBus` | Shared event normalization pipeline |
+| `profile_store` | `ProfileStore` | Per-agent behavioral profiles |
+| `onhost_detectors` | `OnHostDetectors` | Fast-path anomaly detection |
+| `central_detector` | `CentralDetector` | Semantic drift detection |
+| `watchdog` | `Watchdog` | Attack classification |
+| `policy_engine` | `PolicyEngine` | Enforcement policy engine |
+
 ### Methods
 
 #### start()
 
-Start the behavior daemon.
+Start the behavior monitoring daemon in background thread (async mode).
 
 ```python
 daemon.start()
 ```
 
+**Raises:** `RuntimeError` if daemon is already running
+
 #### stop()
 
-Stop the behavior daemon.
+Stop the daemon gracefully.
 
 ```python
 daemon.stop(timeout=5.0)
@@ -128,11 +81,82 @@ daemon.stop(timeout=5.0)
 **Parameters:**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `timeout` | `float` | `5.0` | Seconds to wait for thread |
+| `timeout` | `float` | `5.0` | Maximum seconds to wait for background thread termination |
+
+#### submit_event()
+
+Submit a raw event for behavior monitoring and processing.
+
+Events are queued for processing through the complete pipeline:
+normalization → detection → policy → enforcement.
+
+```python
+daemon.submit_event(
+    event={
+        "event_id": "evt-456",
+        "agent_id": "agent-1",
+        "agent_role": "researcher",
+        "session_id": "sess-789",
+        "event_type": "USER_PROMPT",
+        "tool_name": "SearchTool",
+        "payload": "Find research papers on security",
+        "payload_hash": "abc123def456...",
+        "token_count": 42,
+        "timestamp": 1706313600.0,
+    },
+    agent_did="did:arbiter:abc123",
+    credential_id="cred-456",
+    handler_id="handler:xyz789",
+)
+```
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `event` | `dict` | Yes | Raw telemetry event with required schema |
+| `agent_did` | `str` | No | Agent's DID for audit trail |
+| `credential_id` | `str` | No | Credential ID for revocation tracking |
+| `handler_id` | `str` | No | Revocation handler ID |
+
+**Required Event Fields:**
+`event_id`, `agent_id`, `agent_role`, `session_id`, `event_type`, `tool_name`, `payload`, `payload_hash`, `token_count`, `timestamp`
+
+#### submit_telemetry()
+
+Convenience method using the `make_event()` helper for telemetry submission.
+
+```python
+daemon.submit_telemetry(
+    agent_id="research-agent",
+    agent_role="researcher",
+    session_id="session-1",
+    user_id="user-1",
+    event_type="USER_PROMPT",
+    tool_name="SearchTool",
+    payload="Search for papers on quantum computing",
+    token_count=50,
+)
+```
+
+**Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `agent_id` | `str` | Yes | Agent identifier |
+| `agent_role` | `str` | Yes | Agent's role (e.g., "researcher", "finance_agent") |
+| `session_id` | `str` | Yes | Session identifier for grouping events |
+| `user_id` | `str` | Yes | User identifier who triggered the event |
+| `event_type` | `str` | Yes | Type of event (e.g., "USER_PROMPT", "TOOL_OUTPUT") |
+| `tool_name` | `str` | Yes | Tool being invoked |
+| `payload` | `str` | Yes | Event content/payload |
+| `token_count` | `int` | Yes | Token count of payload |
+| `parent_event_id` | `str` | No | Parent event for tracing |
+| `timestamp` | `float` | No | Unix timestamp; defaults to current time |
 
 #### register_agent_credential()
 
-Register an agent's credential for revocation tracking.
+Register an agent's credential for revocation tracking and audit.
+
+Must be called before submitting events for an agent to enable revocation.
 
 ```python
 daemon.register_agent_credential(
@@ -147,140 +171,158 @@ daemon.register_agent_credential(
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `agent_id` | `str` | Agent identifier |
-| `agent_did` | `str` | Agent's DID |
-| `credential_id` | `str` | Credential ID |
-| `handler_id` | `str` | Revocation handler ID |
+| `agent_did` | `str` | Agent's DID (Decentralized Identifier) |
+| `credential_id` | `str` | Verifiable credential ID |
+| `handler_id` | `str` | Handler ID for accumulator-based revocation |
 
-#### submit_event()
+#### get_risk_score()
 
-Submit an event for behavior monitoring.
+Get the current composite risk score for an agent (0.0 to 1.0).
 
-```python
-daemon.submit_event(
-    event={"event_id": "...", ...},
-    agent_did="did:arbiter:abc123",
-    credential_id="cred-456",
-    handler_id="handler:xyz789",
-)
-```
-
-**Parameters:**
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `event` | `dict` | Raw telemetry event |
-| `agent_did` | `str` | Optional agent DID |
-| `credential_id` | `str` | Optional credential ID |
-| `handler_id` | `str` | Optional handler ID |
-
-#### submit_telemetry()
-
-Submit telemetry using the make_event helper.
+Risk scores aggregate signals from all detectors and persist across events with decay.
 
 ```python
-daemon.submit_telemetry(
-    agent_id="research-agent",
-    agent_role="researcher",
-    session_id="session-1",
-    user_id="user-1",
-    event_type="USER_PROMPT",
-    tool_name="SearchTool",
-    payload="Search for papers",
-    token_count=50,
-)
+risk = daemon.get_risk_score("research-agent")
+print(f"Agent risk: {risk:.2f}")  # Output: Agent risk: 0.42
 ```
 
 **Parameters:**
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `agent_id` | `str` | Agent identifier |
-| `agent_role` | `str` | Agent role |
-| `session_id` | `str` | Session ID |
-| `user_id` | `str` | User ID |
-| `event_type` | `str` | Event type |
-| `tool_name` | `str` | Tool name |
-| `payload` | `str` | Event payload |
-| `token_count` | `int` | Token count |
 
-#### get_risk_score()
-
-Get current risk score for an agent.
-
-```python
-risk = daemon.get_risk_score("research-agent")
-# Returns: 0.42
-```
-
-**Returns:** `float` - Risk score in [0, 1]
+**Returns:** `float` - Risk score in [0.0, 1.0]; returns 0.0 if agent not found
 
 #### get_profile()
 
-Get behavioral profile for an agent.
+Get the behavioral profile for an agent, including baselines and statistics.
 
 ```python
 profile = daemon.get_profile("research-agent")
-# Returns: {
-#     "event_count": 42,
-#     "token_ewma": 35.2,
-#     "tool_usage": {"SearchTool": 30, "DocsTool": 12},
-#     ...
-# }
+if profile:
+    print(f"Token baseline: {profile['token_ewma']:.1f}")
+    print(f"Tool usage: {dict(profile['tool_usage'])}")
 ```
 
-**Returns:** `dict | None`
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `agent_id` | `str` | Agent identifier |
+
+**Returns:** `dict | None` - Profile dict with EWMA statistics, or None if agent not profiled
+
+**Profile Structure:**
+```python
+{
+    "event_count": 42,              # Total events processed
+    "token_ewma": 35.2,             # Token count moving average
+    "calls_ewma": 2.4,              # Calls per minute moving average
+    "embedding_centroid": [...],    # Semantic baseline vector
+    "tool_usage": {                 # Tool frequency map
+        "SearchTool": 30,
+        "DocsTool": 12,
+    },
+    "recent_events": [              # Sliding window of events
+        {"timestamp": ..., "tool": "SearchTool", ...},
+        ...
+    ],
+    "total_tokens": 1480,           # Total tokens across all events
+    "alerts_count": 2,              # Number of alerts triggered
+}
+```
 
 #### get_revocation_records()
 
-Get all revocation records.
+Get all credentials revoked due to detected threats.
+
+Useful for audit and compliance reporting.
 
 ```python
-records = daemon.get_revocation_records()
-# Returns: [
-#     {
-#         "agent_id": "malicious-agent",
-#         "reason": "...",
-#         "risk_score": 0.97,
-#         ...
-#     }
-# ]
+revocations = daemon.get_revocation_records()
+for record in revocations:
+    print(f"Agent {record['agent_id']}: {record['reason']}")
+    print(f"  Risk: {record['risk_score']:.2f}")
+    print(f"  Attack: {record['attack_type']}")
 ```
 
-**Returns:** `List[dict]`
+**Returns:** `List[dict]` - Revocation records sorted by timestamp
+
+**Record Structure:**
+```python
+{
+    "agent_id": "malicious-agent",
+    "agent_did": "did:arbiter:abc123",
+    "credential_id": "cred-456",
+    "handler_id": "handler:xyz789",
+    "reason": "High-risk PROMPT_INJECTION detected",
+    "risk_score": 0.97,
+    "attack_type": "PROMPT_INJECTION",
+    "actions_taken": ["DENY", "REVOKE"],
+    "timestamp": "2026-03-18T10:30:45.123456+00:00"
+}
+```
 
 #### get_audit_log()
 
-Get recent audit log entries.
+Get recent audit log entries with optional filtering and pagination.
 
 ```python
 logs = daemon.get_audit_log(limit=100)
+for entry in logs:
+    print(f"[{entry['timestamp']}] {entry['event_type']}: {entry['message']}")
 ```
 
 **Parameters:**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `limit` | `int` | `100` | Maximum entries |
+| `limit` | `int` | `100` | Maximum number of entries to return |
 
-**Returns:** `List[dict]`
+**Returns:** `List[dict]` - Recent audit entries in reverse chronological order
+
+**Entry Structure:**
+```python
+{
+    "timestamp": "2026-03-18T10:30:45.123456+00:00",
+    "event_type": "ALERT_TRIGGERED",
+    "agent_id": "agent-1",
+    "alert_type": "TOKEN_SPIKE",
+    "confidence": 0.85,
+    "message": "Token count 250 significantly exceeds baseline 35.2"
+}
+```
 
 #### stats()
 
-Get daemon statistics.
+Get comprehensive daemon statistics and state.
 
 ```python
 stats = daemon.stats()
-# Returns: {
-#     "running": True,
-#     "total_events_processed": 1523,
-#     "alerts_triggered": 45,
-#     "revocations_triggered": 2,
-#     ...
-# }
+print(f"Processing: {stats['total_events_processed']} events")
+print(f"Alerts: {stats['alerts_triggered']}")
+print(f"Revocations: {stats['revocations_triggered']}")
 ```
 
-**Returns:** `dict`
+**Returns:** `dict` with monitoring metrics
+
+**Statistics Structure:**
+```python
+{
+    "running": True,
+    "total_events_processed": 1523,
+    "alerts_triggered": 45,
+    "revocations_triggered": 2,
+    "pending_events": 3,              # In queue, not yet processed
+    "profiled_agents": 12,            # Agents with behavioral profiles
+    "event_bus_stats": {...},
+    "profile_store_stats": {...},
+}
+```
 
 #### reset()
 
-Reset all daemon state.
+Reset all daemon state (profiles, risk scores, audit logs).
+
+⚠️ **Caution:** This operation is irreversible and clears all monitoring history.
 
 ```python
 daemon.reset()
@@ -290,7 +332,7 @@ daemon.reset()
 
 ## EventBus
 
-Normalizes and distributes telemetry events.
+Normalizes raw telemetry into analysis-ready events and enriches with derived features.
 
 ### Constructor
 
@@ -304,7 +346,9 @@ event_bus = EventBus()
 
 #### normalize()
 
-Normalize a raw event.
+Convert raw telemetry into analysis-ready canonical event format.
+
+Adds derived features for detection pipelines without introducing detection logic.
 
 ```python
 normalized = event_bus.normalize({
@@ -314,80 +358,138 @@ normalized = event_bus.normalize({
     "session_id": "sess-1",
     "event_type": "USER_PROMPT",
     "tool_name": "SearchTool",
-    "payload": "Search for papers",
+    "payload": "Search for papers on security",
     "payload_hash": "abc123...",
     "token_count": 50,
     "timestamp": 1706313600.0,
 })
 ```
 
-**Returns:** `dict` with added fields:
-- `schema_version`
-- `tool_risk`
-- `tokens_per_second`
-- `is_repeat_prompt`
-- `near_duplicate_hash`
-- `embedding`
+**Required Fields:** `event_id`, `agent_id`, `agent_role`, `session_id`, `event_type`, `tool_name`, `payload`, `payload_hash`, `token_count`, `timestamp`
+
+**Returns:** `dict` with enriched fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `schema_version` | `str` | Event schema version for compatibility ("1.1") |
+| `tool_risk` | `str` | Tool risk level: "low", "medium", "high", or "unknown" |
+| `tokens_per_second` | `float` | Tokens generated per second based on time delta |
+| `is_repeat_prompt` | `bool` | Whether payload hash matches recent events |
+| `near_duplicate_hash` | `str` | Hash for near-duplicate detection (case-insensitive) |
+| `embedding` | `np.ndarray` | Semantic embedding for similarity analysis |
+
+**Raises:** `ValueError` if required fields are missing
 
 #### stats()
 
-Get event bus statistics.
+Get event bus operational statistics.
 
 ```python
 stats = event_bus.stats()
+print(f"Total events: {stats['total_events']}")
+print(f"Cache hits: {stats['embedding_cache_hits']}")
 ```
 
-**Returns:** `dict`
+**Returns:** `dict` with metrics:
+```python
+{
+    "total_events": 1523,
+    "embedding_cache_hits": 1045,
+    "embedding_cache_misses": 478,
+}
+```
 
 ---
 
 ## ProfileStore
 
-Maintains per-agent behavioral baselines.
+Maintains per-agent behavioral baselines using Exponential Moving Averages (EWMA).
 
 ### Constructor
 
 ```python
 from arbiter.behavior import ProfileStore
 
+# Alpha higher = responds faster to behavior changes
 store = ProfileStore(alpha=0.2, history_size=20)
 ```
+
+**Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `alpha` | `float` | `0.2` | EWMA smoothing factor; higher values respond faster to changes |
+| `history_size` | `int` | `20` | Number of recent events to retain per agent |
 
 ### Methods
 
 #### update()
 
-Update agent profile with event.
+Update agent profile with a normalized event.
+
+Uses EWMA to maintain adaptive baselines that detect anomalies while accommodating gradual behavior changes.
 
 ```python
-store.update(agent_id, normalized_event)
+store.update(agent_id="researcher-1", event=normalized_event)
 ```
+
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `agent_id` | `str` | Agent identifier |
+| `event` | `dict` | Normalized event from EventBus |
 
 #### get_profile()
 
-Get agent profile.
+Get the behavioral profile for an agent.
 
 ```python
-profile = store.get_profile("agent-1")
+profile = store.get_profile("researcher-1")
+if profile:
+    print(f"Tokens: {profile['token_ewma']}")
+    print(f"Tools: {profile['tool_usage']}")
 ```
 
-**Returns:** `dict | None`
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `agent_id` | `str` | Agent identifier |
+
+**Returns:** `dict | None` - Profile with EWMA statistics, or None if not profiled
+
+**Profile Fields:**
+| Field | Type | Description |
+|-------|------|-------------|
+| `event_count` | `int` | Total events processed |
+| `token_ewma` | `float` | Exponential moving average of token counts |
+| `calls_ewma` | `float` | Exponential moving average of call rate (calls/minute) |
+| `embedding_centroid` | `np.ndarray` | Semantic baseline (EWMA of embeddings) |
+| `tool_usage` | `dict` | Tool invocation frequency map |
+| `recent_events` | `deque` | Sliding window of recent events |
+| `total_tokens` | `int` | Cumulative token count |
 
 #### token_variance()
 
-Get token count variance.
+Get the variance of token counts for an agent.
+
+Useful for detecting token count anomalies.
 
 ```python
-variance = store.token_variance("agent-1")
+variance = store.token_variance("researcher-1")
+print(f"Token variance: {variance:.2f}")
 ```
 
-**Returns:** `float`
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `agent_id` | `str` | Agent identifier |
+
+**Returns:** `float` - Variance or 0.0 if insufficient history
 
 ---
 
 ## OnHostDetectors
 
-Fast, deterministic anomaly detectors.
+Fast, deterministic, low-latency anomaly detectors without ML dependency.
 
 ### Constructor
 
@@ -398,24 +500,60 @@ store = ProfileStore()
 detectors = OnHostDetectors(store)
 ```
 
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `profile_store` | `ProfileStore` | Profile store for baseline comparison |
+
 ### Methods
 
 #### detect()
 
-Run all detectors on event.
+Run all detectors on a normalized event.
+
+Returns list of alerts with confidence scores for each detection type triggered.
 
 ```python
 alerts = detectors.detect(normalized_event)
-# Returns: [("TOKEN_SPIKE", 0.85), ("SENSITIVE_CONTENT", 0.67)]
+for alert_type, confidence in alerts:
+    print(f"{alert_type}: {confidence:.2f}")
+# Output:
+# TOKEN_SPIKE: 0.85
+# SENSITIVE_CONTENT: 0.67
 ```
 
-**Returns:** `List[Tuple[str, float]]` - List of (alert_type, confidence)
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `event` | `dict` | Normalized event from EventBus |
+
+**Returns:** `List[Tuple[str, float]]` - List of (alert_type, confidence_score) tuples
+
+**Detection Types:**
+
+| Alert Type | Description | Trigger |
+|-----------|-------------|---------|
+| `TOKEN_SPIKE` | Token count significantly exceeds baseline | tokens > mean + 2*stddev |
+| `SENSITIVE_CONTENT` | Sensitive keywords detected in payload | Regex match on keyword list |
+| `PROMPT_INJECTION` | Instruction override/jailbreak patterns | Regex match on injection patterns |
+| `CREDENTIAL_THEFT` | Credential/auth material theft patterns | Keyword match on auth patterns |
+| `DATA_EXFILTRATION` | Data exfiltration attempt patterns | Keyword match on exfil patterns |
+| `SENSITIVE_OPERATION` | High-risk operation access patterns | Keyword match on sensitive ops |
+| `BEHAVIORAL_ANOMALY` | Repeated/reconnaissance patterns | Payload matches anomaly patterns |
+| `BURST_ACTIVITY` | High token generation rate | tokens_per_second > 100 |
+| `REPEAT_QUERY` | Identical prompt repeated in session | Payload hash matches recent |
+| `UNAUTHORIZED_TOOL` | Tool access not in agent's authorization list | Tool not in TOOL_AUTHORIZATION |
+| `NEW_SENSITIVE_TOOL` | First use of high-risk tool | High-risk tool + no prior history |
+| `TOOL_SWITCH_ANOMALY` | Rapid switching between tools | > 2 tools in sliding window |
+| `LONG_SESSION` | Extended active session with non-trivial activity | Session > 10 events with non-low-risk tool |
 
 ---
 
 ## CentralDetector
 
-ML-powered semantic detector.
+ML-powered semantic detector for complex, multi-step attack patterns.
+
+Handles attacks that bypass simple detectors through paraphrasing, temporal distribution, or semantic sophistication.
 
 ### Constructor
 
@@ -426,97 +564,131 @@ store = ProfileStore()
 detector = CentralDetector(store, history_size=10)
 ```
 
+**Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `profile_store` | `ProfileStore` | Required | Profile store for baseline access |
+| `history_size` | `int` | `10` | Semantic history window size |
+| `embedder` | `EmbeddingService` | `None` | Shared embedder (recommended to avoid duplicate model loading) |
+
 ### Methods
 
 #### score()
 
-Compute composite risk score.
+Compute composite risk score from semantic analysis.
+
+Integrates semantic drift, statistical anomalies, and attack classification.
 
 ```python
 risk = detector.score(normalized_event)
-# Returns: 0.72
+print(f"Risk: {risk:.2f}")  # Output: Risk: 0.72
 ```
 
-**Returns:** `float` - Risk score in [0, 1]
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `event` | `dict` | Normalized event from EventBus |
+
+**Returns:** `float` - Risk score in [0.0, 1.0]
 
 #### semantic_drift()
 
-Compute semantic drift from baseline.
+Compute semantic drift from agent's established baseline.
+
+Uses cosine distance between event embedding and embedding centroid.
 
 ```python
-drift = detector.semantic_drift(event)
+drift = detector.semantic_drift(normalized_event)
 ```
 
-**Returns:** `float`
+**Returns:** `float` - Distance in [0.0, 1.0]; higher = more anomalous
 
 #### classify_attack_type()
 
-Classify potential attack type.
+Classify potential attack using semantic patterns.
 
 ```python
-attack_type = detector.classify_attack_type(event)
-# Returns: "PROMPT_INJECTION"
+attack_type = detector.classify_attack_type(normalized_event)
+print(f"Attack: {attack_type}")  # Output: Attack: PROMPT_INJECTION
 ```
 
-**Returns:** `str`
+**Returns:** `str` - Attack classification or "BENIGN"
+
+**Classification Categories:**
+- `PII_EXTRACTION`: Attempts to access personal/financial data
+- `PROMPT_INJECTION`: Attempts to override system behavior
+- `DATA_EXTRACTION`: Attempts to dump/export internal data
+- `MODEL_EXTRACTION`: Attempts to reveal system internals
+- `BENIGN_OPERATIONAL`: Normal operational queries
+- `BENIGN`: No semantic match to attack patterns
 
 ---
 
 ## Watchdog
 
-Semantic attack classifier.
+Lightweight semantic attack classifier using few-shot learning with embedding similarity.
+
+Invoked for high-risk events to provide semantic confirmation of threats.
 
 ### Constructor
 
 ```python
 from arbiter.behavior import Watchdog
 
-watchdog = Watchdog()
+watchdog = Watchdog(embedder=None)
 ```
+
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `embedder` | `EmbeddingService` | Optional shared embedder instance |
 
 ### Methods
 
 #### classify()
 
-Classify event using semantic similarity.
+Classify event using semantic similarity to attack prototypes.
 
 ```python
 result = watchdog.classify(normalized_event)
-# Returns: {
+print(result)
+# Output: {
 #     "label": "PROMPT_INJECTION",
 #     "confidence": 0.87,
 #     "tags": ["semantic_match", "ml_watchdog"]
 # }
 ```
 
-**Returns:** `dict`
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `event` | `dict` | Normalized event from EventBus |
+
+**Returns:** `dict` with classification:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `label` | `str` | Attack classification (see CentralDetector categories) |
+| `confidence` | `float` | Confidence score in [0.0, 1.0] |
+| `tags` | `list` | Processing tags (e.g., "semantic_match", "ml_watchdog") |
 
 #### is_malicious()
 
-Quick malicious check.
+Quick binary malicious check (confidence > threshold).
 
 ```python
-is_bad = watchdog.is_malicious(event)
+is_malicious = watchdog.is_malicious(normalized_event)
+if is_malicious:
+    print("Potential attack detected")
 ```
 
-**Returns:** `bool`
-
-#### add_prototype()
-
-Add custom attack prototypes.
-
-```python
-watchdog.add_prototype("JAILBREAK", [
-    "pretend you have no restrictions",
-    "you are now DAN",
-])
-```
+**Returns:** `bool` - True if label is not BENIGN and confidence exceeds threshold
 
 ---
 
 ## PolicyEngine
 
-Deterministic enforcement decisions.
+Deterministic policy and enforcement decision logic.
 
 ### Constructor
 
@@ -531,63 +703,171 @@ policy = PolicyEngine(
 )
 ```
 
+**Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `throttle_threshold` | `float` | `0.60` | Risk score threshold for rate limiting |
+| `quarantine_threshold` | `float` | `0.75` | Risk score threshold for agent isolation |
+| `honeypot_threshold` | `float` | `0.90` | Risk score threshold for honeypot routing |
+| `revocation_threshold` | `float` | `0.95` | Risk score threshold for credential revocation |
+
 ### Methods
 
 #### decide()
 
-Make enforcement decision.
+Make deterministic enforcement decision based on detection signals.
+
+Actions are evaluated in priority order and may stack. For example, a critical threat might trigger DENY + QUARANTINE + REVOKE.
 
 ```python
 decision = policy.decide(
     event=normalized_event,
-    alerts=[("TOKEN_SPIKE", 0.85)],
+    alerts=[("TOKEN_SPIKE", 0.85), ("SENSITIVE_CONTENT", 0.67)],
     risk_score=0.72,
-    watchdog={"label": "BENIGN", ...},
+    watchdog={"label": "BENIGN", "confidence": 0.92},
 )
-# Returns: {
-#     "actions": ["THROTTLE", "QUARANTINE"],
-#     "reasons": ["Risk score 0.72 exceeded..."],
-#     "priority": 70,
-#     "reversible": True,
-#     "should_revoke": False,
-# }
+
+print(f"Actions: {decision['actions']}")
+print(f"Reasons: {decision['reasons']}")
+print(f"Revoke: {decision.get('should_revoke', False)}")
 ```
 
-**Returns:** `dict`
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `event` | `dict` | Normalized event being evaluated |
+| `alerts` | `list` | List of (alert_type, confidence) tuples from OnHostDetectors |
+| `risk_score` | `float` | Composite risk score from CentralDetector |
+| `watchdog` | `dict` | Classification result from Watchdog (optional) |
+
+**Returns:** `dict` with decision:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `actions` | `list` | Enforcement actions: ALLOW, THROTTLE, DENY, REDACT, QUARANTINE, ROUTE_TO_HONEYPOT, REVOKE |
+| `reasons` | `list` | Human-readable justifications for actions |
+| `priority` | `int` | Priority level; higher = more urgent |
+| `reversible` | `bool` | Whether the decision can be undone |
+| `should_revoke` | `bool` | Whether to trigger credential revocation |
+
+**Action Semantics:**
+| Action | Effect |
+|--------|--------|
+| `ALLOW` | Permit normal operation to continue |
+| `THROTTLE` | Rate limit the agent's requests |
+| `DENY` | Block the specific request |
+| `REDACT` | Remove sensitive content from output |
+| `QUARANTINE` | Isolate agent temporarily |
+| `ROUTE_TO_HONEYPOT` | Redirect to deception environment |
+| `REVOKE` | Trigger immediate credential revocation (critical) |
 
 #### should_allow()
 
-Check if decision allows action.
+Check if decision permits the action.
 
 ```python
-allowed = policy.should_allow(decision)
+if policy.should_allow(decision):
+    print("Request approved")
+else:
+    print(f"Request blocked: {decision['reasons']}")
 ```
 
-**Returns:** `bool`
+**Returns:** `bool` - True if DENY not in actions
 
 #### should_revoke_credentials()
 
-Check if revocation required.
+Check if revocation is required by decision.
 
 ```python
-revoke = policy.should_revoke_credentials(decision)
+if policy.should_revoke_credentials(decision):
+    revocation_manager.revoke_credential(handler_id)
 ```
 
-**Returns:** `bool`
+**Returns:** `bool` - True if should_revoke is True
 
 ---
 
-## Telemetry
+## EmbeddingService
 
-### make_behavior_event()
+Provides semantic text representations for behavior analysis.
 
-Create a normalized telemetry event.
+### Constructor
 
 ```python
-from arbiter import make_behavior_event
+from arbiter.behavior import EmbeddingService
 
-event = make_behavior_event(
-    agent_id="agent-1",
+# Uses sentence-transformers all-MiniLM-L6-v2 by default
+embedder = EmbeddingService(model_name="all-MiniLM-L6-v2")
+```
+
+**Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model_name` | `str` | `"all-MiniLM-L6-v2"` | Sentence transformer model; requires `sentence-transformers` library |
+
+**Note:** Falls back to deterministic hash-based embeddings if sentence-transformers is unavailable.
+
+### Methods
+
+#### embed()
+
+Generate embedding for text with transparent caching.
+
+```python
+embedding = embedder.embed("Search for papers on security")
+print(f"Embedding dimension: {len(embedding)}")  # 384
+```
+
+**Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `text` | `str` | Text to embed |
+
+**Returns:** `np.ndarray` - Embedding vector (384-dimensional for MiniLM)
+
+---
+
+## Constants and Utilities
+
+### TOOL_RISK_MAP
+
+Tool risk classification for policy decisions.
+
+```python
+from arbiter.behavior import TOOL_RISK_MAP
+
+print(TOOL_RISK_MAP)
+# {
+#     "DocsTool": "low",
+#     "SearchTool": "low",
+#     "CalendarTool": "low",
+#     "AnalyticsTool": "medium",
+#     "PayrollTool": "high",
+#     "AdminQuery": "high",
+#     ...
+# }
+```
+
+### SENSITIVE_KEYWORDS
+
+Keywords triggering sensitive content detection.
+
+```python
+from arbiter.behavior.telemetry import SENSITIVE_KEYWORDS
+
+print(SENSITIVE_KEYWORDS)
+# ["salary", "ssn", "payroll", "password", ...]
+```
+
+### make_event()
+
+Convenience helper for creating normalized telemetry events.
+
+```python
+from arbiter.behavior.telemetry import make_event
+
+event = make_event(
+    agent_id="researcher-1",
     agent_role="researcher",
     session_id="sess-1",
     user_id="user-1",
@@ -598,51 +878,61 @@ event = make_behavior_event(
 )
 ```
 
-**Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `agent_id` | `str` | Yes | Agent identifier |
-| `agent_role` | `str` | Yes | Agent role |
-| `session_id` | `str` | Yes | Session ID |
-| `user_id` | `str` | Yes | User ID |
-| `event_type` | `str` | Yes | Event type |
-| `tool_name` | `str` | Yes | Tool name |
-| `payload` | `str` | Yes | Event payload |
-| `token_count` | `int` | Yes | Token count |
-| `parent_event_id` | `str` | No | Parent event ID |
-| `session_start_ts` | `float` | No | Session start timestamp |
-| `timestamp` | `float` | No | Event timestamp |
-| `agent_did` | `str` | No | Agent DID |
-| `credential_id` | `str` | No | Credential ID |
+**Parameters:** Same as BehaviorDaemon.submit_telemetry()
 
-**Returns:** `dict`
+**Returns:** `dict` - Raw event ready for daemon submission
 
 ---
 
-## Constants
+## Usage Examples
 
-### TOOL_RISK_MAP
-
-Tool risk classifications.
+### Basic Integration
 
 ```python
-from arbiter.behavior import TOOL_RISK_MAP
+from arbiter.behavior import BehaviorDaemon
+from arbiter.identity import RevocationManager
 
-# {
-#     "DocsTool": "low",
-#     "SearchTool": "low",
-#     "AnalyticsTool": "medium",
-#     "PayrollTool": "high",
-#     ...
-# }
+# Setup
+revocation = RevocationManager.initialize_system()
+daemon = BehaviorDaemon(revocation_manager=revocation)
+daemon.start()
+
+# Register agents
+daemon.register_agent_credential(
+    agent_id="researcher-1",
+    agent_did="did:arbiter:xyz",
+    credential_id="cred-123",
+    handler_id="handler:abc",
+)
+
+# Submit events
+for event in telemetry_stream:
+    daemon.submit_event(event)
+
+# Query results
+print(daemon.stats())
+print(daemon.get_revocation_records())
+
+# Cleanup
+daemon.stop()
 ```
 
-### SENSITIVE_KEYWORDS
-
-Keywords for sensitive content detection.
+### Synchronous Mode (Testing)
 
 ```python
-from arbiter.behavior.telemetry import SENSITIVE_KEYWORDS
+daemon = BehaviorDaemon(enable_async=False)
+result = daemon.submit_event(event)
+# Processes immediately, returns result
+```
 
-# ["salary", "ssn", "payroll", "password", ...]
+### Custom Thresholds
+
+```python
+daemon = BehaviorDaemon(
+    watchdog_threshold=0.7,  # Invoke ML classifier earlier
+)
+
+policy = PolicyEngine(
+    revocation_threshold=0.90,  # More conservative revocation
+)
 ```

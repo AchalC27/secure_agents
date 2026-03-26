@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-03-22T14:06:17.730851",
+  "total_duration_sec": 77.32,
+  "output_directory": "benchmark_results",
+  "config": {
+    "iterations": 1000
+  },
+  "benchmarks_run": [
+    "scenarios",
+    "latency",
+    "throughput",
+    "security",
+    "ablation",
+    "revocation"
+  ]
+}

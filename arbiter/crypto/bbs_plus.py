@@ -39,7 +39,7 @@ from arbiter.common.utils import bytes_to_base58, sha256_hash
 # =============================================================================
 
 # BBS+ uses BLS12-381 curve
-CURVE_ORDER = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
+CURVE_ORDER = 0x73EDA753299D7D483339D80809A1D80553BDA402FFFE5BFEFFFFFFFF00000001
 G1_SIZE = 48  # Compressed G1 point size
 G2_SIZE = 96  # Compressed G2 point size
 SCALAR_SIZE = 32
@@ -50,20 +50,22 @@ SIGNATURE_SIZE = G1_SIZE + SCALAR_SIZE + SCALAR_SIZE  # A, e, s
 # Key Structures
 # =============================================================================
 
+
 @dataclass
 class BBSPublicKey:
     """BBS+ public key for signature verification.
-    
+
     The public key consists of:
     - w: Generator in G2 raised to secret key
     - h0, h1, ..., hL: Message generators in G1
-    
+
     Attributes:
         w_bytes: Public key element in G2
         generators: Message generators in G1 (one per message slot)
         max_messages: Maximum number of messages this key can sign
         key_id: Unique identifier
     """
+
     w_bytes: bytes
     generators: list[bytes]
     max_messages: int
@@ -78,9 +80,10 @@ class BBSPublicKey:
 @dataclass
 class BBSPrivateKey:
     """BBS+ private key for signing.
-    
+
     The private key is a scalar x in Z_p.
     """
+
     x_bytes: bytes
     public_key: BBSPublicKey
 
@@ -88,6 +91,7 @@ class BBSPrivateKey:
 @dataclass
 class BBSKeyPair:
     """BBS+ key pair for credential issuance."""
+
     public_key: BBSPublicKey
     private_key: BBSPrivateKey
 
@@ -96,15 +100,17 @@ class BBSKeyPair:
 # Signature and Proof Structures
 # =============================================================================
 
+
 @dataclass
 class BBSSignature:
     """BBS+ signature over multiple messages.
-    
+
     The signature (A, e, s) where:
     - A: Point in G1
     - e: Scalar (hash of messages)
     - s: Scalar (blinding factor)
     """
+
     a_bytes: bytes
     e_bytes: bytes
     s_bytes: bytes
@@ -120,24 +126,25 @@ class BBSSignature:
             raise ValueError(f"Invalid signature size: {len(data)}")
         return cls(
             a_bytes=data[:G1_SIZE],
-            e_bytes=data[G1_SIZE:G1_SIZE + SCALAR_SIZE],
-            s_bytes=data[G1_SIZE + SCALAR_SIZE:],
+            e_bytes=data[G1_SIZE : G1_SIZE + SCALAR_SIZE],
+            s_bytes=data[G1_SIZE + SCALAR_SIZE :],
         )
 
 
 @dataclass
 class BBSProof:
     """BBS+ zero-knowledge proof of selective disclosure.
-    
+
     Proves possession of a valid BBS+ signature while revealing
     only a subset of the signed messages.
-    
+
     Attributes:
         proof_bytes: The actual ZK proof
         disclosed_indices: Indices of messages being disclosed
         disclosed_messages: The disclosed message values
         nonce: Verifier's challenge nonce
     """
+
     proof_bytes: bytes
     disclosed_indices: list[int]
     disclosed_messages: list[bytes]
@@ -148,21 +155,22 @@ class BBSProof:
 # Key Generation
 # =============================================================================
 
+
 def generate_bbs_keypair(
     max_messages: int = 10,
     seed: Optional[bytes] = None,
 ) -> BBSKeyPair:
     """Generate a BBS+ key pair.
-    
+
     Algorithm: BBS+ KeyGen
-    
+
     PLACEHOLDER: This is a simulated implementation.
     Production should use validated pairing cryptography library.
-    
+
     Args:
         max_messages: Maximum number of messages the key can sign
         seed: Optional seed for deterministic generation
-        
+
     Returns:
         BBSKeyPair with public and private keys
     """
@@ -217,26 +225,27 @@ def generate_bbs_keypair(
 # Signing
 # =============================================================================
 
+
 def bbs_sign(
     private_key: BBSPrivateKey,
     messages: list[bytes],
 ) -> BBSSignature:
     """Sign multiple messages using BBS+.
-    
+
     Algorithm: BBS+ Sign
-    
+
     The signature binds all messages together such that
     any subset can later be selectively disclosed.
-    
+
     PLACEHOLDER: This is a simulated implementation.
-    
+
     Args:
         private_key: BBS+ private key
         messages: List of messages to sign
-        
+
     Returns:
         BBSSignature over all messages
-        
+
     Raises:
         SignatureError: If signing fails
     """
@@ -284,22 +293,23 @@ def bbs_sign(
 # Verification
 # =============================================================================
 
+
 def bbs_verify(
     public_key: BBSPublicKey,
     messages: list[bytes],
     signature: BBSSignature,
 ) -> bool:
     """Verify a BBS+ signature.
-    
+
     Algorithm: BBS+ Verify
-    
+
     PLACEHOLDER: Cannot truly verify without real pairing operations.
-    
+
     Args:
         public_key: Issuer's BBS+ public key
         messages: The signed messages
         signature: Signature to verify
-        
+
     Returns:
         True if signature is valid
     """
@@ -320,13 +330,18 @@ def bbs_verify(
 
         return True
 
+    except (ValueError, TypeError) as e:
+        logger.debug(f"BBS+ verification failed: {e}")
+        return False
     except Exception as e:
-        raise SignatureVerificationError(str(e)) from e
+        logger.warning(f"BBS+ verification error: {e}")
+        return False
 
 
 # =============================================================================
 # Selective Disclosure Proofs
 # =============================================================================
+
 
 def bbs_create_proof(
     public_key: BBSPublicKey,
@@ -336,25 +351,25 @@ def bbs_create_proof(
     nonce: bytes,
 ) -> BBSProof:
     """Create a zero-knowledge proof of selective disclosure.
-    
+
     Algorithm: BBS+ ProofGen
-    
+
     This allows proving possession of a valid signature while
     revealing only selected messages. Hidden messages remain
     completely private - the verifier learns nothing about them.
-    
+
     PLACEHOLDER: This is a simulated implementation.
-    
+
     Args:
         public_key: Issuer's BBS+ public key
         signature: The original BBS+ signature
         messages: All signed messages
         disclosed_indices: Which message indices to reveal
         nonce: Verifier's challenge for freshness
-        
+
     Returns:
         BBSProof for selective disclosure
-        
+
     Raises:
         ProofError: If proof creation fails
     """
@@ -406,20 +421,20 @@ def bbs_verify_proof(
     total_message_count: int,
 ) -> bool:
     """Verify a BBS+ selective disclosure proof.
-    
+
     Algorithm: BBS+ ProofVerify
-    
+
     Verifies that the prover possesses a valid BBS+ signature
     over messages where the disclosed ones match and hidden
     ones are properly committed.
-    
+
     PLACEHOLDER: Cannot truly verify without real pairing operations.
-    
+
     Args:
         public_key: Issuer's BBS+ public key
         proof: The selective disclosure proof
         total_message_count: Total number of messages in original signature
-        
+
     Returns:
         True if proof is valid
     """
@@ -451,21 +466,22 @@ def bbs_verify_proof(
 # Utility Functions
 # =============================================================================
 
+
 def derive_message_generators(
     domain: bytes,
     count: int,
 ) -> list[bytes]:
     """Derive message generators using hash-to-curve.
-    
+
     For a given domain separator, deterministically generates
     the required number of G1 generators for BBS+ signing.
-    
+
     PLACEHOLDER: Real implementation would use proper hash-to-curve.
-    
+
     Args:
         domain: Domain separator for generator derivation
         count: Number of generators needed
-        
+
     Returns:
         List of generator bytes
     """
@@ -479,10 +495,10 @@ def derive_message_generators(
 
 def hash_to_scalar(data: bytes) -> bytes:
     """Hash arbitrary data to a BLS12-381 scalar.
-    
+
     Args:
         data: Data to hash
-        
+
     Returns:
         32-byte scalar in Z_p
     """

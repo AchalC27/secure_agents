@@ -21,7 +21,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from queue import Queue, Empty
 from typing import Any, Callable, Dict, List, Optional
 
@@ -41,16 +41,17 @@ logger = logging.getLogger("arbiter.behavior")
 class BehaviorEvent:
     """
     Wrapper for behavior monitoring events.
-    
+
     Combines raw event data with processing metadata.
     """
+
     raw_event: Dict[str, Any]
     agent_did: Optional[str] = None
     credential_id: Optional[str] = None
     handler_id: Optional[str] = None
     timestamp: float = field(default_factory=time.time)
     processed: bool = False
-    
+
     def as_telemetry(self) -> Dict[str, Any]:
         """Convert to telemetry event format."""
         event = self.raw_event.copy()
@@ -65,6 +66,7 @@ class RevocationRecord:
     """
     Record of a credential revocation triggered by behavior monitoring.
     """
+
     agent_id: str
     agent_did: Optional[str]
     credential_id: Optional[str]
@@ -73,8 +75,8 @@ class RevocationRecord:
     risk_score: float
     attack_type: str
     actions_taken: List[str]
-    timestamp: datetime = field(default_factory=datetime.utcnow)
-    
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize for logging/storage."""
         return {
@@ -93,7 +95,7 @@ class RevocationRecord:
 class BehaviorDaemon:
     """
     Background behavior monitoring daemon.
-    
+
     Orchestrates the entire behavior monitoring pipeline:
     1. Receives events from agents
     2. Normalizes and enriches events
@@ -102,26 +104,26 @@ class BehaviorDaemon:
     5. Invokes watchdog for high-risk events
     6. Applies policy decisions
     7. Triggers credential revocation when necessary
-    
+
     Designed to run as a daemon process alongside agent operations.
-    
+
     Example:
         from arbiter.behavior import BehaviorDaemon
         from arbiter.identity import RevocationManager
-        
+
         # Create with revocation integration
         revocation = RevocationManager.initialize_system()
         daemon = BehaviorDaemon(revocation_manager=revocation)
-        
+
         # Start daemon (runs in background thread)
         daemon.start()
-        
+
         # Submit events for monitoring
         daemon.submit_event({...})
-        
+
         # Query status
         print(daemon.stats())
-        
+
         # Stop when done
         daemon.stop()
     """
@@ -136,7 +138,7 @@ class BehaviorDaemon:
     ) -> None:
         """
         Initialize the behavior daemon.
-        
+
         Args:
             revocation_manager: Optional RevocationManager for credential revocation
             revocation_callback: Optional callback(handler_id, reason) for revocation
@@ -153,32 +155,32 @@ class BehaviorDaemon:
         self.central_detector = CentralDetector(self.profile_store, embedder=embedder)
         self.watchdog = Watchdog(embedder=embedder)
         self.policy_engine = PolicyEngine()
-        
+
         # Revocation integration
         self.revocation_manager = revocation_manager
         self.revocation_callback = revocation_callback
-        
+
         # Configuration
         self.watchdog_threshold = watchdog_threshold
         self.process_interval = process_interval
         self.enable_async = enable_async
-        
+
         # Event queue for async processing
         self._event_queue: Queue[BehaviorEvent] = Queue()
-        
+
         # State
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        
+
         # Metrics
         self._total_events = 0
         self._alerts_triggered = 0
         self._revocations_triggered = 0
-        
+
         # Audit log
         self._audit_log: List[Dict[str, Any]] = []
         self._revocation_records: List[RevocationRecord] = []
-        
+
         # Agent to credential mapping
         self._agent_credentials: Dict[str, Dict[str, str]] = {}
 
@@ -191,7 +193,7 @@ class BehaviorDaemon:
     ) -> None:
         """
         Register an agent's credential for revocation tracking.
-        
+
         Args:
             agent_id: Agent identifier
             agent_did: Agent's DID
@@ -210,17 +212,20 @@ class BehaviorDaemon:
         agent_did: Optional[str] = None,
         credential_id: Optional[str] = None,
         handler_id: Optional[str] = None,
-    ) -> None:
+    ) -> Dict[str, Any]:
         """
         Submit an event for behavior monitoring.
-        
+
         Events can be submitted directly or through the telemetry helper.
-        
+
         Args:
             event: Raw telemetry event
             agent_did: Optional agent DID for revocation
             credential_id: Optional credential ID
             handler_id: Optional revocation handler ID
+
+        Returns:
+            Processing result with risk_score, alerts, decision, etc.
         """
         # Check if we have registered credentials for this agent
         agent_id = event.get("agent_id")
@@ -229,18 +234,19 @@ class BehaviorDaemon:
             agent_did = agent_did or creds.get("agent_did")
             credential_id = credential_id or creds.get("credential_id")
             handler_id = handler_id or creds.get("handler_id")
-        
+
         behavior_event = BehaviorEvent(
             raw_event=event,
             agent_did=agent_did,
             credential_id=credential_id,
             handler_id=handler_id,
         )
-        
+
         if self.enable_async and self._running:
             self._event_queue.put(behavior_event)
+            return {"status": "queued", "agent_id": agent_id}
         else:
-            self._process_event(behavior_event)
+            return self._process_event(behavior_event)
 
     def submit_telemetry(
         self,
@@ -253,12 +259,12 @@ class BehaviorDaemon:
         payload: str,
         token_count: int,
         **kwargs: Any,
-    ) -> None:
+    ) -> Dict[str, Any]:
         """
         Submit telemetry using the make_event helper.
-        
+
         Convenience method that constructs the event.
-        
+
         Args:
             agent_id: Agent identifier
             agent_role: Agent role
@@ -269,6 +275,9 @@ class BehaviorDaemon:
             payload: Event payload/content
             token_count: Token count
             **kwargs: Additional event fields
+
+        Returns:
+            Processing result with risk_score, alerts, decision, etc.
         """
         event = make_event(
             agent_id=agent_id,
@@ -281,50 +290,48 @@ class BehaviorDaemon:
             token_count=token_count,
             **kwargs,
         )
-        self.submit_event(event)
+        return self.submit_event(event)
 
     def _process_event(self, behavior_event: BehaviorEvent) -> Dict[str, Any]:
         """
         Process a single event through the monitoring pipeline.
-        
+
         Args:
             behavior_event: Event to process
-            
+
         Returns:
             Processing result with decision and metadata
         """
         event = behavior_event.raw_event
         agent_id = event.get("agent_id", "unknown")
-        
+
         try:
             # Step 1: Normalize event
             normalized = self.event_bus.normalize(event)
-            
+
             # Step 2: Update profile
             self.profile_store.update(agent_id, normalized)
-            
+
             # Step 3: Run fast-path detectors
             alerts = self.onhost_detectors.detect(normalized)
-            
+
             # Step 4: Run central detector
             risk_score = self.central_detector.score(normalized)
-            
+
             # Step 5: Invoke watchdog for high-risk events
             watchdog_result = None
             if risk_score >= self.watchdog_threshold:
                 watchdog_result = self.watchdog.classify(normalized)
-            
+
             # Step 6: Apply policy
-            decision = self.policy_engine.decide(
-                normalized, alerts, risk_score, watchdog_result
-            )
-            
+            decision = self.policy_engine.decide(normalized, alerts, risk_score, watchdog_result)
+
             # Update metrics
             self._total_events += 1
             if alerts:
                 self._alerts_triggered += len(alerts)
                 self.profile_store.increment_alerts(agent_id)
-            
+
             # Step 7: Handle revocation if needed
             if decision.get("should_revoke"):
                 self._handle_revocation(
@@ -333,7 +340,7 @@ class BehaviorDaemon:
                     watchdog_result,
                     decision,
                 )
-            
+
             # Create result
             result = {
                 "agent_id": agent_id,
@@ -343,14 +350,14 @@ class BehaviorDaemon:
                 "decision": decision,
                 "timestamp": time.time(),
             }
-            
+
             # Log high-risk events
             if risk_score >= 0.6 or decision.get("actions"):
                 self._audit_log.append(result)
-            
+
             behavior_event.processed = True
             return result
-            
+
         except Exception as e:
             logger.error(f"Error processing event for {agent_id}: {e}")
             return {
@@ -368,7 +375,7 @@ class BehaviorDaemon:
     ) -> None:
         """
         Handle credential revocation for misbehaving agents.
-        
+
         Args:
             behavior_event: The triggering event
             risk_score: Risk score at time of revocation
@@ -378,11 +385,11 @@ class BehaviorDaemon:
         agent_id = behavior_event.raw_event.get("agent_id", "unknown")
         handler_id = behavior_event.handler_id
         attack_type = watchdog_result.get("label", "UNKNOWN") if watchdog_result else "UNKNOWN"
-        
+
         # Build revocation reason
         reasons = decision.get("reasons", [])
         reason = "; ".join(reasons) if reasons else f"Behavior anomaly: {attack_type}"
-        
+
         # Create revocation record
         record = RevocationRecord(
             agent_id=agent_id,
@@ -395,15 +402,15 @@ class BehaviorDaemon:
             actions_taken=decision.get("actions", []),
         )
         self._revocation_records.append(record)
-        
+
         logger.warning(
             f"REVOCATION TRIGGERED for agent {agent_id}: "
             f"risk_score={risk_score:.2f}, attack_type={attack_type}"
         )
-        
+
         # Perform actual revocation
         revoked = False
-        
+
         if handler_id and self.revocation_manager:
             try:
                 self.revocation_manager.revoke_credential(handler_id)
@@ -411,7 +418,7 @@ class BehaviorDaemon:
                 logger.info(f"Credential revoked via RevocationManager: {handler_id}")
             except Exception as e:
                 logger.error(f"RevocationManager revocation failed: {e}")
-        
+
         if handler_id and self.revocation_callback:
             try:
                 self.revocation_callback(handler_id, reason)
@@ -419,7 +426,7 @@ class BehaviorDaemon:
                 logger.info(f"Credential revoked via callback: {handler_id}")
             except Exception as e:
                 logger.error(f"Revocation callback failed: {e}")
-        
+
         if revoked:
             self._revocations_triggered += 1
             self.profile_store.increment_revocation_warnings(agent_id)
@@ -432,22 +439,20 @@ class BehaviorDaemon:
     def _processing_loop(self) -> None:
         """Background processing loop."""
         logger.info("Behavior daemon processing loop started")
-        
+
         while self._running:
             try:
                 # Get next event with timeout
                 try:
-                    behavior_event = self._event_queue.get(
-                        timeout=self.process_interval
-                    )
+                    behavior_event = self._event_queue.get(timeout=self.process_interval)
                     self._process_event(behavior_event)
                 except Empty:
                     pass
-                    
+
             except Exception as e:
                 logger.error(f"Error in processing loop: {e}")
                 time.sleep(self.process_interval)
-        
+
         logger.info("Behavior daemon processing loop stopped")
 
     def start(self) -> None:
@@ -455,9 +460,9 @@ class BehaviorDaemon:
         if self._running:
             logger.warning("Daemon already running")
             return
-        
+
         self._running = True
-        
+
         if self.enable_async:
             self._thread = threading.Thread(
                 target=self._processing_loop,
@@ -472,17 +477,17 @@ class BehaviorDaemon:
     def stop(self, timeout: float = 5.0) -> None:
         """
         Stop the behavior daemon.
-        
+
         Args:
             timeout: Seconds to wait for processing thread
         """
         self._running = False
-        
+
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=timeout)
             if self._thread.is_alive():
                 logger.warning("Daemon thread did not stop cleanly")
-        
+
         logger.info("Behavior daemon stopped")
 
     def is_running(self) -> bool:
@@ -508,7 +513,7 @@ class BehaviorDaemon:
     def stats(self) -> Dict[str, Any]:
         """
         Get daemon statistics.
-        
+
         Returns:
             Statistics dictionary
         """
@@ -533,16 +538,16 @@ class BehaviorDaemon:
         self._audit_log.clear()
         self._revocation_records.clear()
         self._agent_credentials.clear()
-        
+
         self.event_bus.reset()
         self.profile_store.clear()
         self.central_detector.reset_all()
-        
+
         # Clear queue
         while not self._event_queue.empty():
             try:
                 self._event_queue.get_nowait()
             except Empty:
                 break
-        
+
         logger.info("Behavior daemon state reset")

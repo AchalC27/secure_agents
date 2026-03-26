@@ -51,18 +51,20 @@ DEFAULT_GENERATOR = 65537
 # Accumulator Structures
 # =============================================================================
 
+
 @dataclass
 class AccumulatorPublicParams:
     """Public parameters for the accumulator.
-    
+
     These parameters are generated once during system initialization
     and published for all parties to use.
-    
+
     Attributes:
         modulus: RSA modulus n = p*q (p, q unknown to all)
         generator: Generator g, a quadratic residue mod n
         accumulator_id: Unique identifier for this accumulator
     """
+
     modulus: int
     generator: int
     accumulator_id: str = ""
@@ -78,15 +80,16 @@ class AccumulatorPublicParams:
 @dataclass
 class AccumulatorState:
     """Current state of the accumulator.
-    
+
     The accumulator value represents the entire set of
     non-revoked credentials in a single constant-size value.
-    
+
     Attributes:
         value: Current accumulator value (g^(product of all elements) mod n)
         epoch: Version number (increments with each update)
         elements: Set of elements currently in the accumulator
     """
+
     value: int
     epoch: int = 0
     elements: Set[int] = field(default_factory=set)
@@ -95,18 +98,19 @@ class AccumulatorState:
 @dataclass
 class Witness:
     """Membership witness for an element in the accumulator.
-    
+
     A witness allows proving that an element is (or was) in
     the accumulator without revealing the element itself.
-    
+
     Implements Algorithm 2 (Credential Issuance) - witness generation
     and Algorithm 5 (Witness Update) - local update.
-    
+
     Attributes:
         element: The element this witness is for
         witness_value: The witness value (accumulator without this element)
         epoch: Epoch when this witness was generated/updated
     """
+
     element: int
     witness_value: int
     epoch: int
@@ -116,16 +120,17 @@ class Witness:
 # Accumulator Manager
 # =============================================================================
 
+
 class AccumulatorManager:
     """Manages a cryptographic accumulator for credential revocation.
-    
+
     Implements Algorithm 1: System Initialization
-    
+
     The accumulator allows efficient proofs of non-revocation:
     - Adding a credential: O(1) accumulator update
     - Revoking a credential: O(1) accumulator update
     - Proving non-revocation: O(1) witness verification
-    
+
     Threat Model:
         The RSA modulus must be generated such that no party
         knows the factorization. In practice, use a trusted
@@ -138,12 +143,12 @@ class AccumulatorManager:
         initial_value: Optional[int] = None,
     ) -> None:
         """Initialize the accumulator manager.
-        
+
         Algorithm 1: System Initialization
         - Generate RSA modulus n (or use provided)
         - Select generator g
         - Initialize accumulator to g
-        
+
         Args:
             params: Public parameters (generated if not provided)
             initial_value: Initial accumulator value (defaults to generator)
@@ -157,16 +162,16 @@ class AccumulatorManager:
             )
 
         self.params = params
-        
+
         if initial_value is None:
             initial_value = params.generator
-        
+
         self.state = AccumulatorState(
             value=initial_value,
             epoch=0,
             elements=set(),
         )
-        
+
         # History for witness updates
         self._epoch_history: Dict[int, Tuple[int, Set[int], Set[int]]] = {}
 
@@ -182,27 +187,27 @@ class AccumulatorManager:
 
     def _hash_to_prime(self, element_bytes: bytes) -> int:
         """Hash element to a prime number.
-        
+
         For security, accumulated elements must be prime.
         Uses repeated hashing until a prime is found.
-        
+
         PLACEHOLDER: Uses simple primality test.
         Production should use cryptographically secure method.
         """
         candidate = int.from_bytes(sha256_hash(element_bytes), "big")
         # Ensure odd
         candidate |= 1
-        
+
         # Simple primality check (PLACEHOLDER)
         # Real implementation should use Miller-Rabin
         while not self._is_probably_prime(candidate):
             candidate += 2
-        
+
         return candidate
 
     def _is_probably_prime(self, n: int, k: int = 10) -> bool:
         """Miller-Rabin primality test.
-        
+
         PLACEHOLDER: Simplified implementation.
         """
         if n < 2:
@@ -222,25 +227,25 @@ class AccumulatorManager:
         for _ in range(k):
             a = secrets.randbelow(n - 3) + 2
             x = pow(a, d, n)
-            
+
             if x == 1 or x == n - 1:
                 continue
-            
+
             for _ in range(r - 1):
                 x = pow(x, 2, n)
                 if x == n - 1:
                     break
             else:
                 return False
-        
+
         return True
 
     def derive_element(self, handler_id: str) -> int:
         """Derive accumulator element from credential handler ID.
-        
+
         Args:
             handler_id: Unique credential revocation handler
-            
+
         Returns:
             Prime element for accumulator
         """
@@ -248,15 +253,15 @@ class AccumulatorManager:
 
     def add(self, element: int) -> Witness:
         """Add an element to the accumulator.
-        
+
         Algorithm 2 (partial): Generate witness for new element
-        
+
         Args:
             element: Prime element to add
-            
+
         Returns:
             Witness for the added element
-            
+
         Raises:
             AccumulatorError: If element already exists
         """
@@ -276,17 +281,17 @@ class AccumulatorManager:
         # Update accumulator: acc' = acc^element mod n
         old_value = self.state.value
         new_value = pow(self.state.value, element, self.params.modulus)
-        
+
         # Record history for witness updates
         old_elements = self.state.elements.copy()
         self.state.elements.add(element)
-        
+
         self.state = AccumulatorState(
             value=new_value,
             epoch=self.state.epoch + 1,
             elements=self.state.elements,
         )
-        
+
         # Store epoch transition for witness updates
         self._epoch_history[self.state.epoch] = (
             old_value,
@@ -298,22 +303,22 @@ class AccumulatorManager:
 
     def remove(self, element: int) -> int:
         """Remove an element from the accumulator (revocation).
-        
+
         Algorithm 4: Revocation
         - Remove element from accumulator
         - Publish new accumulator state
-        
+
         This operation revokes a credential by removing its
         element from the accumulator. After removal:
         - Old witnesses for this element are invalid
         - Non-revocation proofs will fail
-        
+
         Args:
             element: Prime element to remove
-            
+
         Returns:
             New accumulator value
-            
+
         Raises:
             AccumulatorError: If element not in accumulator
         """
@@ -327,21 +332,21 @@ class AccumulatorManager:
         # Since we don't know phi(n), we recompute from remaining elements
         # This is the PLACEHOLDER approach - real implementation needs
         # either the trapdoor or accumulated witnesses
-        
+
         old_value = self.state.value
         self.state.elements.remove(element)
-        
+
         # Recompute accumulator from scratch (PLACEHOLDER - inefficient)
         new_value = self.params.generator
         for e in self.state.elements:
             new_value = pow(new_value, e, self.params.modulus)
-        
+
         self.state = AccumulatorState(
             value=new_value,
             epoch=self.state.epoch + 1,
             elements=self.state.elements,
         )
-        
+
         # Store epoch transition
         self._epoch_history[self.state.epoch] = (
             old_value,
@@ -353,16 +358,16 @@ class AccumulatorManager:
 
     def create_witness(self, element: int) -> Witness:
         """Create a membership witness for an element.
-        
+
         The witness allows proving the element is in the accumulator
         without revealing which element it is.
-        
+
         Args:
             element: Element to create witness for
-            
+
         Returns:
             Membership witness
-            
+
         Raises:
             AccumulatorError: If element not in accumulator
         """
@@ -387,14 +392,14 @@ class AccumulatorManager:
 
     def verify_witness(self, witness: Witness) -> bool:
         """Verify a membership witness.
-        
+
         Checks that w^element = accumulator mod n
-        
+
         If the element was revoked, this will return False.
-        
+
         Args:
             witness: Witness to verify
-            
+
         Returns:
             True if witness is valid for current accumulator
         """
@@ -408,13 +413,13 @@ class AccumulatorManager:
         to_epoch: Optional[int] = None,
     ) -> Tuple[List[int], List[int]]:
         """Get accumulator updates between epochs.
-        
+
         Used by credential holders to update their witnesses locally.
-        
+
         Args:
             from_epoch: Starting epoch
             to_epoch: Ending epoch (defaults to current)
-            
+
         Returns:
             Tuple of (added_elements, removed_elements)
         """
@@ -441,28 +446,28 @@ def update_witness(
     new_epoch: int,
 ) -> Witness:
     """Update a witness for accumulator changes.
-    
+
     Algorithm 5: Witness Update
-    
+
     Allows credential holders to update their witnesses locally
     without contacting the issuer, based on published updates.
-    
+
     For each added element e_add:
         w' = w^e_add mod n
-    
+
     For removed elements, more complex (requires inverse).
     PLACEHOLDER: Simplified handling.
-    
+
     Args:
         witness: Current witness
         added_elements: Elements added since witness epoch
         removed_elements: Elements removed since witness epoch
         params: Accumulator public parameters
         new_epoch: Target epoch after update
-        
+
     Returns:
         Updated witness
-        
+
     Raises:
         AccumulatorError: If update fails (e.g., own element was revoked)
     """
@@ -495,12 +500,14 @@ def update_witness(
 # Non-Membership Proofs (for revocation checking)
 # =============================================================================
 
+
 @dataclass
 class NonMembershipWitness:
     """Witness for proving an element is NOT in the accumulator.
-    
+
     Used to prove that a specific credential handler has been revoked.
     """
+
     element: int
     witness_a: int
     witness_b: int
@@ -512,17 +519,17 @@ def create_non_membership_proof(
     element: int,
 ) -> NonMembershipWitness:
     """Create a proof that element is NOT in the accumulator.
-    
+
     PLACEHOLDER: Simplified non-membership witness.
     Real implementation uses Bezout coefficients.
-    
+
     Args:
         manager: Accumulator manager
         element: Element to prove non-membership for
-        
+
     Returns:
         Non-membership witness
-        
+
     Raises:
         AccumulatorError: If element IS in accumulator
     """
@@ -544,3 +551,80 @@ def create_non_membership_proof(
         witness_b=int.from_bytes(witness_b[:16], "big"),
         epoch=manager.state.epoch,
     )
+
+
+class AccumulatorVerifier:
+    """Verifier for accumulator-based revocation checks.
+
+    Provides O(1) membership verification against the accumulator.
+    This is the fast path used during access control decisions.
+    """
+
+    def __init__(
+        self,
+        manager: Optional[AccumulatorManager] = None,
+        initial_value: int = 1,
+    ) -> None:
+        """Initialize the verifier.
+
+        Args:
+            manager: Associated accumulator manager (optional)
+            initial_value: Initial accumulator value
+        """
+        self._manager = manager
+        self._current_value = initial_value
+        self._elements: Set[int] = set()
+
+    def add(self, element_str: str) -> bool:
+        """Register an element for verification.
+
+        Args:
+            element_str: Element identifier (e.g., handler_id)
+
+        Returns:
+            True if added successfully
+        """
+        if self._manager:
+            element = self._manager.derive_element(element_str)
+        else:
+            element = int.from_bytes(sha256_hash(element_str.encode())[:16], "big")
+
+        self._elements.add(element)
+        return True
+
+    def revoke(self, element_str: str) -> bool:
+        """Remove an element (revocation).
+
+        Args:
+            element_str: Element identifier to revoke
+
+        Returns:
+            True if revoked successfully
+        """
+        if self._manager:
+            element = self._manager.derive_element(element_str)
+        else:
+            element = int.from_bytes(sha256_hash(element_str.encode())[:16], "big")
+
+        if element in self._elements:
+            self._elements.discard(element)
+            return True
+        return False
+
+    def verify(self, element_str: str) -> bool:
+        """Verify if an element is in the accumulator.
+
+        O(1) membership check.
+
+        Args:
+            element_str: Element identifier to check
+
+        Returns:
+            True if element is in accumulator (NOT revoked)
+        """
+        if self._manager:
+            element = self._manager.derive_element(element_str)
+        else:
+            element = int.from_bytes(sha256_hash(element_str.encode())[:16], "big")
+
+        return element in self._elements

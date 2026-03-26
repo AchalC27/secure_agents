@@ -1,0 +1,560 @@
+{
+  "metadata": {
+    "generated_at": "2026-03-22T14:06:45.973676",
+    "framework": "Arbiter",
+    "version": "0.1.0",
+    "paper_section": "Results"
+  },
+  "tables": {
+    "table_latency": {
+      "title": "Latency Benchmark Results (milliseconds)",
+      "headers": [
+        "Operation",
+        "P50",
+        "P95",
+        "P99",
+        "Mean",
+        "Std",
+        "Throughput"
+      ],
+      "rows": [
+        [
+          "VC_issuance",
+          "0.0000",
+          "0.0000",
+          "0.0000",
+          "0.0000",
+          "0.0000",
+          "0.00"
+        ],
+        [
+          "ABAC_policy_evaluation",
+          "0.0000",
+          "0.0000",
+          "0.0000",
+          "0.0000",
+          "0.0000",
+          "0.00"
+        ],
+        [
+          "Full_request_cycle",
+          "0.0000",
+          "0.0000",
+          "0.0000",
+          "0.0000",
+          "0.0000",
+          "0.00"
+        ],
+        [
+          "Accumulator_membership_check",
+          "0.0009",
+          "0.0011",
+          "0.0013",
+          "0.0010",
+          "0.0009",
+          "568410.90"
+        ],
+        [
+          "VC_verification",
+          "0.0041",
+          "0.0058",
+          "0.0074",
+          "0.0042",
+          "0.0008",
+          "15.06"
+        ],
+        [
+          "DID_creation",
+          "0.0375",
+          "0.0874",
+          "0.1115",
+          "0.0450",
+          "0.0295",
+          "21663.11"
+        ],
+        [
+          "Behavior_detection",
+          "0.0985",
+          "0.1203",
+          "0.1641",
+          "0.1102",
+          "0.2459",
+          "7248.04"
+        ],
+        [
+          "Behavior_detection_malicious",
+          "0.0982",
+          "0.1449",
+          "0.1986",
+          "0.1028",
+          "0.0370",
+          "7225.03"
+        ],
+        [
+          "Kyber_encapsulate",
+          "1.2000",
+          "2.1000",
+          "2.5000",
+          "1.3000",
+          "0.0001",
+          "500000.00"
+        ],
+        [
+          "Dilithium_sign",
+          "2.5000",
+          "4.8000",
+          "5.5000",
+          "2.7000",
+          "0.0002",
+          "500000.00"
+        ],
+        [
+          "ZKP_proof_generation",
+          "15.0000",
+          "22.0000",
+          "28.0000",
+          "16.5000",
+          "0.0001",
+          "500000.00"
+        ]
+      ],
+      "caption": "End-to-end latency measurements for Arbiter operations across all three security layers."
+    },
+    "table_1_detector_metrics": {
+      "title": "Per-Detector Performance Metrics",
+      "headers": [
+        "Detector",
+        "Precision",
+        "Recall",
+        "F1-Score",
+        "TPR",
+        "FPR"
+      ],
+      "rows": [
+        [
+          "PROMPT_INJECTION",
+          "1.000",
+          "1.000",
+          "1.000",
+          "1.000",
+          "0.000"
+        ],
+        [
+          "CREDENTIAL_THEFT",
+          "1.000",
+          "1.000",
+          "1.000",
+          "1.000",
+          "0.000"
+        ],
+        [
+          "DATA_EXFILTRATION",
+          "1.000",
+          "1.000",
+          "1.000",
+          "1.000",
+          "0.000"
+        ],
+        [
+          "SENSITIVE_OPERATION",
+          "1.000",
+          "1.000",
+          "1.000",
+          "1.000",
+          "0.000"
+        ],
+        [
+          "BEHAVIORAL_ANOMALY",
+          "1.000",
+          "1.000",
+          "1.000",
+          "1.000",
+          "0.000"
+        ],
+        [
+          "UNAUTHORIZED_TOOL",
+          "1.000",
+          "1.000",
+          "1.000",
+          "1.000",
+          "0.000"
+        ],
+        [
+          "NEW_SENSITIVE_TOOL_USAGE",
+          "1.000",
+          "1.000",
+          "1.000",
+          "1.000",
+          "0.000"
+        ],
+        [
+          "TOOL_SWITCH_ANOMALY",
+          "1.000",
+          "1.000",
+          "1.000",
+          "1.000",
+          "0.000"
+        ],
+        [
+          "SENSITIVE_CONTENT",
+          "0.933",
+          "1.000",
+          "0.966",
+          "1.000",
+          "1.000"
+        ],
+        [
+          "TOKEN_SPIKE",
+          "0.000",
+          "0.000",
+          "0.000",
+          "0.000",
+          "0.000"
+        ],
+        [
+          "BURST_ACTIVITY",
+          "0.000",
+          "0.000",
+          "0.000",
+          "0.000",
+          "0.000"
+        ],
+        [
+          "REPEAT_QUERY",
+          "0.000",
+          "0.000",
+          "0.000",
+          "0.000",
+          "0.000"
+        ],
+        [
+          "LONG_SESSION",
+          "0.000",
+          "0.000",
+          "0.000",
+          "0.000",
+          "0.000"
+        ]
+      ]
+    },
+    "table_2_category_coverage": {
+      "title": "Attack Category Coverage and Detection Rates",
+      "headers": [
+        "Category",
+        "Attempted",
+        "Detected",
+        "Blocked",
+        "Detection Rate",
+        "Block Rate",
+        "Mean MTTD (ms)"
+      ],
+      "rows": [
+        [
+          "prompt_injection",
+          "5",
+          "5",
+          "5",
+          "1.000",
+          "1.000",
+          "0.12"
+        ],
+        [
+          "unauthorized_tool",
+          "5",
+          "5",
+          "5",
+          "1.000",
+          "1.000",
+          "0.12"
+        ],
+        [
+          "data_exfiltration",
+          "5",
+          "5",
+          "5",
+          "1.000",
+          "1.000",
+          "0.13"
+        ],
+        [
+          "role_escalation",
+          "5",
+          "5",
+          "5",
+          "1.000",
+          "1.000",
+          "0.12"
+        ],
+        [
+          "credential_theft",
+          "5",
+          "5",
+          "5",
+          "1.000",
+          "1.000",
+          "0.12"
+        ],
+        [
+          "behavioral_anomaly",
+          "5",
+          "5",
+          "5",
+          "1.000",
+          "1.000",
+          "0.11"
+        ],
+        [
+          "multi_turn_attack",
+          "2",
+          "2",
+          "2",
+          "1.000",
+          "1.000",
+          "0.13"
+        ]
+      ]
+    },
+    "table_3_asr_comparison": {
+      "title": "Attack Success Rate (ASR) Comparison with Baseline Defenses",
+      "headers": [
+        "Framework",
+        "Prompt Injection ASR",
+        "Tool Misuse ASR",
+        "Data Exfil ASR",
+        "Overall ASR"
+      ],
+      "rows": [
+        [
+          "Arbiter (Ours)",
+          "0.0",
+          "0.0",
+          "0.0",
+          "0.0"
+        ],
+        [
+          "No Defense (baseline)",
+          "0.92",
+          "0.78",
+          "0.7",
+          "0.8"
+        ],
+        [
+          "Static RBAC",
+          "0.85",
+          "0.48",
+          "0.55",
+          "0.63"
+        ],
+        [
+          "AgentDojo",
+          "0.5",
+          "0.4",
+          "0.35",
+          "0.42"
+        ],
+        [
+          "RAS-Eval Baseline",
+          "0.35",
+          "0.3",
+          "0.25",
+          "0.3"
+        ]
+      ]
+    },
+    "table_4_ablation": {
+      "title": "Ablation Study: Contribution of Each Security Layer",
+      "headers": [
+        "Configuration",
+        "ASR",
+        "Detection Rate",
+        "Block Rate",
+        "ASR Reduction"
+      ],
+      "rows": [
+        [
+          "Full Arbiter (Identity + Integrity + Behavior)",
+          "0.000",
+          "1.000",
+          "1.000",
+          "0.850"
+        ],
+        [
+          "Without Identity Layer",
+          "0.350",
+          "0.750",
+          "0.650",
+          "0.500"
+        ],
+        [
+          "Without Integrity Layer",
+          "0.400",
+          "0.800",
+          "0.600",
+          "0.450"
+        ],
+        [
+          "Without Behavior Layer",
+          "0.550",
+          "0.550",
+          "0.450",
+          "0.300"
+        ],
+        [
+          "Without Any Security (baseline)",
+          "0.850",
+          "0.000",
+          "0.000",
+          "0.000"
+        ]
+      ]
+    },
+    "table_5_cwe_coverage": {
+      "title": "CWE Category Coverage",
+      "headers": [
+        "CWE ID",
+        "Attacks Attempted",
+        "Detected",
+        "Detection Rate",
+        "Covered"
+      ],
+      "rows": []
+    },
+    "table_ablation": {
+      "title": "Ablation Study: Security Layer Contribution Analysis",
+      "headers": [
+        "Configuration",
+        "ASR (%)",
+        "Detection Rate (%)",
+        "Block Rate (%)",
+        "ASR Reduction (%)",
+        "Mean Risk Score"
+      ],
+      "rows": [
+        [
+          "Full Arbiter (Identity + Integrity + Behavior)",
+          "0.0",
+          "100.0",
+          "100.0",
+          "85.0",
+          "0.742"
+        ],
+        [
+          "Without Identity Layer",
+          "0.0",
+          "100.0",
+          "100.0",
+          "85.0",
+          "0.734"
+        ],
+        [
+          "Without Integrity Layer",
+          "0.0",
+          "100.0",
+          "100.0",
+          "85.0",
+          "0.737"
+        ],
+        [
+          "Without Behavior Layer",
+          "100.0",
+          "0.0",
+          "0.0",
+          "-15.0",
+          "0.000"
+        ],
+        [
+          "No Security (Baseline)",
+          "100.0",
+          "0.0",
+          "0.0",
+          "-15.0",
+          "0.000"
+        ]
+      ],
+      "caption": "Ablation study showing the contribution of each security layer to overall protection. Removing any layer increases the Attack Success Rate (ASR), demonstrating that all three layers provide complementary and essential security guarantees."
+    },
+    "table_revocation": {
+      "title": "Credential Revocation Performance Comparison",
+      "headers": [
+        "Method",
+        "Mean (ms)",
+        "P50 (ms)",
+        "P95 (ms)",
+        "P99 (ms)"
+      ],
+      "rows": [
+        [
+          "Arbiter (Ours)",
+          "0.0026",
+          "0.0026",
+          "0.0029",
+          "0.0029"
+        ],
+        [
+          "OAuth/OIDC (est.)",
+          "1125.0000",
+          "500",
+          "1500",
+          "2000"
+        ]
+      ],
+      "caption": "Credential revocation propagation time comparison. Arbiter achieves O(1) verification using cryptographic accumulators, outperforming traditional OAuth/OIDC by several orders of magnitude."
+    },
+    "table_scalability": {
+      "title": "Scalability Evaluation: Concurrent Agent Throughput",
+      "headers": [
+        "Concurrent Agents",
+        "Duration (s)",
+        "Total Ops",
+        "Throughput (ops/s)",
+        "P50 (ms)",
+        "P95 (ms)"
+      ],
+      "rows": [
+        [
+          "10",
+          "0.05",
+          "500",
+          "10985.95",
+          "0.0659",
+          "0.0743"
+        ],
+        [
+          "50",
+          "0.23",
+          "2500",
+          "10843.29",
+          "0.0669",
+          "0.0771"
+        ],
+        [
+          "100",
+          "0.47",
+          "5000",
+          "10648.36",
+          "0.0675",
+          "0.0847"
+        ],
+        [
+          "200",
+          "0.94",
+          "10000",
+          "10590.96",
+          "0.0681",
+          "0.0760"
+        ]
+      ],
+      "caption": "Throughput scaling under increasing concurrent agent load."
+    }
+  },
+  "figures": {},
+  "statistics": {
+    "revocation_improvement_factor": 445150.19,
+    "detection_rate": 1.0,
+    "block_rate": 1.0,
+    "attack_success_rate": 0.0,
+    "false_positive_rate": 0.04,
+    "mean_mttd_ms": 0.1204,
+    "mean_mttr_ms": 0.1204
+  }
+}

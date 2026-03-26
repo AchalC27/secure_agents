@@ -1,0 +1,46 @@
+{
+  "timestamp": "2026-03-22T14:06:09.908051",
+  "events_per_agent": 50,
+  "results": [
+    {
+      "operation": "Concurrent_behavior_monitoring",
+      "duration_sec": 0.05,
+      "total_operations": 500,
+      "throughput": 10985.95,
+      "latency_p50_ms": 0.0659,
+      "latency_p95_ms": 0.0743,
+      "latency_p99_ms": 0.1214,
+      "concurrent_agents": 10
+    },
+    {
+      "operation": "Concurrent_behavior_monitoring",
+      "duration_sec": 0.23,
+      "total_operations": 2500,
+      "throughput": 10843.29,
+      "latency_p50_ms": 0.0669,
+      "latency_p95_ms": 0.0771,
+      "latency_p99_ms": 0.1171,
+      "concurrent_agents": 50
+    },
+    {
+      "operation": "Concurrent_behavior_monitoring",
+      "duration_sec": 0.47,
+      "total_operations": 5000,
+      "throughput": 10648.36,
+      "latency_p50_ms": 0.0675,
+      "latency_p95_ms": 0.0847,
+      "latency_p99_ms": 0.1163,
+      "concurrent_agents": 100
+    },
+    {
+      "operation": "Concurrent_behavior_monitoring",
+      "duration_sec": 0.94,
+      "total_operations": 10000,
+      "throughput": 10590.96,
+      "latency_p50_ms": 0.0681,
+      "latency_p95_ms": 0.076,
+      "latency_p99_ms": 0.108,
+      "concurrent_agents": 200
+    }
+  ]
+}

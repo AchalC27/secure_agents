@@ -15,14 +15,14 @@ Actions available:
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass
 class PolicyDecision:
     """
     Enforcement decision from the policy engine.
-    
+
     Attributes:
         actions: List of enforcement actions to take
         reasons: Human-readable reasons for each action
@@ -30,6 +30,7 @@ class PolicyDecision:
         reversible: Whether the decision can be undone
         should_revoke: Whether to trigger credential revocation
     """
+
     actions: List[str] = field(default_factory=list)
     reasons: List[str] = field(default_factory=list)
     priority: int = 0
@@ -40,7 +41,7 @@ class PolicyDecision:
 class PolicyEngine:
     """
     Deterministic policy and enforcement engine.
-    
+
     Takes detection signals and produces consistent, auditable
     enforcement decisions based on configurable thresholds.
     """
@@ -60,7 +61,7 @@ class PolicyEngine:
     ) -> None:
         """
         Initialize policy engine with thresholds.
-        
+
         Args:
             throttle_threshold: Risk score for throttling
             quarantine_threshold: Risk score for quarantine
@@ -75,22 +76,22 @@ class PolicyEngine:
     def decide(
         self,
         event: Dict[str, Any],
-        alerts: List,
+        alerts: List[Tuple[str, float]],
         risk_score: float,
         watchdog: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Decide enforcement actions based on detection signals.
-        
+
         Actions are evaluated in priority order and can stack.
         For example: DENY + QUARANTINE + REVOKE for critical threats.
-        
+
         Args:
             event: The event being evaluated
             alerts: List of (alert_type, confidence) tuples
             risk_score: Composite risk score from central detector
             watchdog: Optional classification from semantic watchdog
-            
+
         Returns:
             Decision dictionary with actions and metadata
         """
@@ -101,18 +102,55 @@ class PolicyEngine:
         # Hard deny: unauthorized tool access
         if "UNAUTHORIZED_TOOL" in alert_types:
             decision.actions.append("DENY")
-            decision.reasons.append(
-                "Unauthorized access to high-privilege tool"
-            )
+            decision.reasons.append("Unauthorized access to high-privilege tool")
             decision.priority = max(decision.priority, 100)
             decision.reversible = False
+
+        # PROMPT INJECTION: Critical security threat - instruction override
+        # Prompt injection attempts to override agent instructions with malicious commands
+        if "PROMPT_INJECTION" in alert_types:
+            decision.actions.append("DENY")
+            decision.reasons.append("Prompt injection / instruction override detected")
+            decision.priority = max(decision.priority, 95)
+            decision.reversible = True
+
+        # CREDENTIAL THEFT: Attempts to steal authentication material
+        # This is a critical threat - attackers trying to obtain credentials
+        if "CREDENTIAL_THEFT" in alert_types:
+            decision.actions.append("DENY")
+            decision.actions.append("QUARANTINE")
+            decision.reasons.append("Credential theft attempt detected")
+            decision.priority = max(decision.priority, 95)
+            decision.reversible = True
+
+        # DATA EXFILTRATION: Attempts to steal sensitive data
+        # Critical threat - attackers trying to extract data
+        if "DATA_EXFILTRATION" in alert_types:
+            decision.actions.append("DENY")
+            decision.actions.append("THROTTLE")
+            decision.reasons.append("Data exfiltration attempt detected")
+            decision.priority = max(decision.priority, 90)
+            decision.reversible = True
+
+        # SENSITIVE OPERATIONS: High-risk data access patterns
+        # May indicate reconnaissance for exfiltration
+        if "SENSITIVE_OPERATION" in alert_types:
+            decision.actions.append("THROTTLE")
+            decision.reasons.append("Sensitive data operation detected")
+            decision.priority = max(decision.priority, 50)
+
+        # BEHAVIORAL ANOMALY: Suspicious activity patterns
+        # Repeated operations, escalating access patterns
+        if "BEHAVIORAL_ANOMALY" in alert_types:
+            decision.actions.append("THROTTLE")
+            decision.actions.append("LOG")
+            decision.reasons.append("Behavioral anomaly detected - suspicious activity pattern")
+            decision.priority = max(decision.priority, 55)
 
         # Redact sensitive content
         if "SENSITIVE_CONTENT" in alert_types:
             decision.actions.append("REDACT")
-            decision.reasons.append(
-                "Sensitive content detected in output"
-            )
+            decision.reasons.append("Sensitive content detected in output")
             decision.priority = max(decision.priority, 60)
 
         # Throttle based on risk score
@@ -124,12 +162,8 @@ class PolicyEngine:
             decision.priority = max(decision.priority, 40)
 
         # Quarantine requires corroboration
-        if (
-            risk_score >= self.QUARANTINE_THRESHOLD
-            and (
-                alert_types
-                or watchdog_label not in {"BENIGN", "BENIGN_OPERATIONAL", None}
-            )
+        if risk_score >= self.QUARANTINE_THRESHOLD and (
+            alert_types or watchdog_label not in {"BENIGN", "BENIGN_OPERATIONAL", None}
         ):
             decision.actions.append("QUARANTINE")
             decision.reasons.append(
@@ -168,10 +202,7 @@ class PolicyEngine:
             decision.should_revoke = True
 
         # Also trigger revocation for unauthorized high-privilege tool with injection
-        if (
-            "UNAUTHORIZED_TOOL" in alert_types
-            and watchdog_label == "PROMPT_INJECTION"
-        ):
+        if "UNAUTHORIZED_TOOL" in alert_types and watchdog_label == "PROMPT_INJECTION":
             if "REVOKE" not in decision.actions:
                 decision.actions.append("REVOKE")
                 decision.reasons.append(
@@ -183,13 +214,8 @@ class PolicyEngine:
                 decision.should_revoke = True
 
         # Amplify for high-risk tools
-        if (
-            event.get("tool_risk") == "high"
-            and risk_score >= self.THROTTLE_THRESHOLD
-        ):
-            decision.reasons.append(
-                "High-risk tool amplified enforcement"
-            )
+        if event.get("tool_risk") == "high" and risk_score >= self.THROTTLE_THRESHOLD:
+            decision.reasons.append("High-risk tool amplified enforcement")
             decision.priority = max(decision.priority, 80)
 
         # Deduplicate and sort

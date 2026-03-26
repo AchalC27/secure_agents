@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-03-22T14:06:17.730532",
+  "iterations": 10,
+  "credential_revocation": {
+    "test_name": "Credential Revocation Propagation",
+    "num_tests": 10,
+    "mean_propagation_ms": 0.0026,
+    "p50_propagation_ms": 0.0026,
+    "p95_propagation_ms": 0.0029,
+    "p99_propagation_ms": 0.0029,
+    "std_propagation_ms": 0.0002,
+    "min_propagation_ms": 0.0024,
+    "max_propagation_ms": 0.0029,
+    "success_rate": 1.0,
+    "pre_access_success_rate": 2.0,
+    "post_access_denial_rate": 1.0
+  },
+  "accumulator_revocation": null,
+  "oauth_comparison": {
+    "arbiter_propagation_ms": 0.0025,
+    "oauth_propagation_estimated_ms": 1125,
+    "improvement_factor": 445150.19,
+    "oauth_type": "OAuth 2.0 / OIDC (network-dependent)"
+  }
+}

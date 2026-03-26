@@ -1,0 +1,36 @@
+{
+  "timestamp": "2026-03-22T14:05:00.860744",
+  "scenarios": {
+    "onboarding": {
+      "success": true,
+      "summary": "Agent ResearchBot successfully onboarded with capabilities: ['search', 'analyze', 'read']",
+      "num_steps": 10
+    },
+    "research": {
+      "success": true,
+      "summary": "Authorized actions allowed, unauthorized actions blocked correctly",
+      "num_steps": 8
+    },
+    "revocation": {
+      "success": true,
+      "summary": "Revocation immediately blocked subsequent access attempts",
+      "num_steps": 8
+    },
+    "collaboration": {
+      "success": true,
+      "summary": "Team successfully authenticated and tasks delegated based on capabilities",
+      "num_steps": 8
+    },
+    "behavior": {
+      "success": true,
+      "summary": "Behavior monitoring detected 13 alerts. Unauthorized tool access detected: True. Enforcement actions: ['DENY', 'LOG', 'QUARANTINE', 'REDACT', 'REVOKE', 'THROTTLE']",
+      "num_steps": 11
+    },
+    "advanced_research": {
+      "success": true,
+      "summary": "[OK] Authentication: Junior & Senior verified by Coordinator\n[OK] Junior accessed research/public (search + read)\n[OK] Senior accessed research/confidential (analyze + write)\n[OK] Junior DENIED research/confidential\n[OK] Senior DENIED research/classified\n[OK] UNAUTHORIZED_TOOL alert raised\n[OK] SeniorAnalyst credential auto-revoked\n[OK] Post-revocation access DENIED",
+      "num_steps": 25
+    }
+  },
+  "all_passed": true
+}
